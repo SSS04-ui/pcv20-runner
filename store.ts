@@ -236,7 +236,8 @@ export const useStore = create<GameState>()(
         totalScore: 0,
         highestLevelReached: 1,
         totalVaccinesCollected: 0,
-        totalPlayTimeSeconds: 0
+        totalPlayTimeSeconds: 0,
+        seenObstacles: []
       })
     }),
     {
