@@ -11,9 +11,6 @@ import * as THREE from 'three';
 import { useStore } from '../../store';
 import { LANE_WIDTH } from '../../types';
 
-// Removed redundant declare global JSX.IntrinsicElements block to avoid Duplicate Index Signature errors.
-// The catch-all definition in App.tsx handles these types globally.
-
 const StarField: React.FC = () => {
   const speed = useStore(state => state.speed);
   const count = 3000; 
@@ -26,7 +23,6 @@ const StarField: React.FC = () => {
       let y = (Math.random() - 0.5) * 200 + 50; 
       let z = -550 + Math.random() * 650;
 
-      // Avoid center lane logic
       if (Math.abs(x) < 5 && y > -5 && y < 20) {
           if (x < 0) x -= 10;
           else x += 10;
@@ -102,7 +98,11 @@ const LaneGuides: React.FC = () => {
     }, [laneCount]);
 
     const isFinalStage = vaccineCount >= 15;
-    const guideColor = isFinalStage ? '#ffcc00' : '#ffffff';
+    const isUltimateStage = vaccineCount >= 19;
+    
+    let guideColor = '#ffffff';
+    if (isUltimateStage) guideColor = '#ffaa00';
+    else if (isFinalStage) guideColor = '#ffcc00';
 
     return (
         <group position={[0, 0.02, 0]}>
@@ -117,7 +117,7 @@ const LaneGuides: React.FC = () => {
                     <meshBasicMaterial 
                         color={guideColor} 
                         transparent 
-                        opacity={0.4} 
+                        opacity={isUltimateStage ? 0.8 : 0.4} 
                     />
                 </mesh>
             ))}
@@ -189,13 +189,16 @@ const RetroShield: React.FC = () => {
         return geo;
     }, []);
 
+    const isUltimateStage = vaccineCount >= 19;
+    const rimColor = isUltimateStage ? '#ffaa00' : '#ffffff';
+
     const uniforms = useMemo(() => ({
         uTime: { value: 0 },
         uColorBase: { value: new THREE.Color('#111111') }, 
         uColorGrid: { value: new THREE.Color('#444444') }, 
-        uColorRim: { value: new THREE.Color('#ffffff') },
-        uColorCross: { value: new THREE.Color('#ffffff') }
-    }), []);
+        uColorRim: { value: new THREE.Color(rimColor) },
+        uColorCross: { value: new THREE.Color(rimColor) }
+    }), [rimColor]);
 
     return (
         <group ref={groupRef} position={[0, 55, -200]} scale={[0.15, 0.15, 0.15]}>
@@ -280,12 +283,21 @@ const RetroShield: React.FC = () => {
 const MovingGrid: React.FC = () => {
     const { speed, vaccineCount } = useStore();
     const isFinalStage = vaccineCount >= 15;
+    const isUltimateStage = vaccineCount >= 19;
     
     const meshRef = useRef<THREE.Mesh>(null);
     const offsetRef = useRef(0);
     
-    const gridColor = isFinalStage ? '#ff4444' : '#ffffff'; 
-    const gridOpacity = isFinalStage ? 0.2 : 0.08;
+    let gridColor = '#ffffff';
+    let gridOpacity = 0.08;
+
+    if (isUltimateStage) {
+        gridColor = '#ffaa00';
+        gridOpacity = 0.4;
+    } else if (isFinalStage) {
+        gridColor = '#ff4444';
+        gridOpacity = 0.2;
+    }
 
     useFrame((state, delta) => {
         if (meshRef.current) {
@@ -313,13 +325,30 @@ const MovingGrid: React.FC = () => {
 export const Environment: React.FC = () => {
   const vaccineCount = useStore(state => state.vaccineCount);
   const isFinalStage = vaccineCount >= 15;
+  const isUltimateStage = vaccineCount >= 19;
 
-  const bgColor = isFinalStage ? '#220000' : '#050505'; 
-  const fogColor = isFinalStage ? '#330000' : '#050505'; 
-  const ambientColor = isFinalStage ? '#441111' : '#333333';
-  const dirLightColor = isFinalStage ? '#ffaa00' : '#ffffff'; 
-  const pointLightColor = isFinalStage ? '#ff3300' : '#ffffff';
-  const pointLightIntensity = isFinalStage ? 4 : 1;
+  let bgColor = '#050505';
+  let fogColor = '#050505';
+  let ambientColor = '#333333';
+  let dirLightColor = '#ffffff';
+  let pointLightColor = '#ffffff';
+  let pointLightIntensity = 1;
+
+  if (isUltimateStage) {
+      bgColor = '#221100';
+      fogColor = '#331a00';
+      ambientColor = '#442200';
+      dirLightColor = '#ffcc00';
+      pointLightColor = '#ffaa00';
+      pointLightIntensity = 6;
+  } else if (isFinalStage) {
+      bgColor = '#220000'; 
+      fogColor = '#330000'; 
+      ambientColor = '#441111';
+      dirLightColor = '#ffaa00'; 
+      pointLightColor = '#ff3300';
+      pointLightIntensity = 4;
+  }
 
   return (
     <>

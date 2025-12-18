@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-
-import React, { useState, useEffect } from 'react';
-import { Heart, Zap, MapPin, Play, Target, Rocket, Shield, Syringe, Star, Clock, ArrowUp, ArrowDown, BarChart3, ChevronLeft, Trash2, Trophy } from 'lucide-react';
+import React from 'react';
+import { Play, Syringe, BarChart3, ChevronLeft, Trash2, Trophy, Star, Clock, Rocket, Zap } from 'lucide-react';
 import { useStore } from '../../store';
 import { GameStatus, RUN_SPEED_BASE } from '../../types';
 import { audio } from '../System/Audio';
@@ -15,7 +14,7 @@ export const HUD: React.FC = () => {
   const { 
     score, vaccineCount, status, level, speed, showLevelUpPopup, setStatus, timeLeft, timeBonus,
     totalScore, highestLevelReached, totalVaccinesCollected, totalPlayTimeSeconds, resetPersistentStats,
-    startGame, isImmortalityActive 
+    startGame 
   } = useStore();
   
   const formatTime = (totalSeconds: number) => {
@@ -35,7 +34,7 @@ export const HUD: React.FC = () => {
                  <div className="relative z-10 flex flex-col items-center p-6 pt-8 min-h-[420px]">
                     <div className="mb-6 text-center">
                         <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500 font-cyber drop-shadow-[0_0_10px_rgba(0,255,255,0.5)] leading-none">PCV20</h1>
-                        <h1 className="text-3xl md:text-4xl font-bold text-white font-cyber tracking-[0.2em] mt-1 drop-shadow-lg">RUNNER</h1>
+                        <h2 className="text-3xl md:text-4xl font-bold text-white font-cyber tracking-[0.2em] mt-1 drop-shadow-lg uppercase">Runner</h2>
                     </div>
                     <div className="w-full bg-white/5 backdrop-blur-md rounded-xl p-5 border border-white/10 mb-auto shadow-lg">
                         <h3 className="text-cyan-400 font-bold text-xs tracking-[0.2em] mb-3 border-b border-white/10 pb-2">MISSION OBJECTIVES</h3>
@@ -151,6 +150,7 @@ export const HUD: React.FC = () => {
   }
 
   const progressPercent = Math.min(100, (vaccineCount / 20) * 100);
+  const isUltimateStage = vaccineCount === 19;
 
   return (
     <div className={containerClass}>
@@ -167,22 +167,26 @@ export const HUD: React.FC = () => {
         </div>
         
         <div className="absolute top-36 md:top-48 left-1/2 transform -translate-x-1/2 flex flex-col items-center w-full max-w-lg px-4">
-             <div className="flex items-center space-x-2 text-white mb-2 drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]">
+             <div className={`flex items-center space-x-2 mb-2 drop-shadow-[0_0_5px_rgba(255,255,255,0.8)] transition-colors ${isUltimateStage ? 'text-yellow-400 scale-110' : 'text-white'}`}>
                  <Syringe className="w-4 h-4 md:w-5 md:h-5" />
                  <span className="text-sm md:text-base font-bold tracking-[0.2em]">VACCINES: {vaccineCount} / 20</span>
              </div>
              <div className="w-full h-3 md:h-4 bg-gray-900/80 border border-gray-700 rounded-full overflow-hidden shadow-[0_0_10px_rgba(0,0,0,0.5)]">
-                 <div className="h-full bg-gradient-to-r from-white to-gray-400 shadow-[0_0_15px_rgba(255,255,255,0.6)] transition-all duration-500 ease-out" style={{ width: `${progressPercent}%` }} />
+                 <div className={`h-full transition-all duration-500 ease-out shadow-[0_0_15px_rgba(255,255,255,0.6)] ${isUltimateStage ? 'bg-gradient-to-r from-yellow-300 to-yellow-600' : 'bg-gradient-to-r from-white to-gray-400'}`} style={{ width: `${progressPercent}%` }} />
              </div>
         </div>
 
-        {showLevelUpPopup && (
+        {(showLevelUpPopup || isUltimateStage) && (
             <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[80] animate-in slide-in-from-top duration-500">
-                <div className="bg-black/80 backdrop-blur-md border border-yellow-400/50 rounded-full px-8 py-3 flex items-center shadow-[0_0_30px_rgba(255,215,0,0.4)]">
-                    <Star className="w-6 h-6 text-yellow-400 mr-3 animate-spin-slow" />
+                <div className={`bg-black/80 backdrop-blur-md border rounded-full px-8 py-3 flex items-center shadow-[0_0_30px_rgba(255,215,0,0.4)] ${isUltimateStage ? 'border-yellow-400 shadow-yellow-500/50' : 'border-yellow-400/50'}`}>
+                    <Star className={`w-6 h-6 mr-3 animate-spin-slow ${isUltimateStage ? 'text-yellow-300' : 'text-yellow-400'}`} />
                     <div className="flex flex-col items-start">
-                        <h2 className="text-xl font-black text-yellow-400 font-cyber leading-none">LEVEL UP</h2>
-                        <span className="text-yellow-200/80 text-[10px] font-mono tracking-widest leading-none mt-1">FINAL STAGE</span>
+                        <h2 className={`text-xl font-black font-cyber leading-none ${isUltimateStage ? 'text-yellow-300' : 'text-yellow-400'}`}>
+                            {isUltimateStage ? 'FINAL VACCINE DETECTED' : 'LEVEL UP'}
+                        </h2>
+                        <span className="text-yellow-200/80 text-[10px] font-mono tracking-widest leading-none mt-1">
+                            {isUltimateStage ? 'OBJECTIVE: GOLDEN VACCINE' : 'FINAL STAGE'}
+                        </span>
                     </div>
                 </div>
             </div>

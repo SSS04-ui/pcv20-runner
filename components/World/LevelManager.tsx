@@ -13,9 +13,6 @@ import { useStore } from '../../store';
 import { GameObject, ObjectType, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, LANE_WIDTH } from '../../types';
 import { audio } from '../System/Audio';
 
-// Removed redundant declare global JSX.IntrinsicElements block to avoid Duplicate Index Signature errors.
-// The catch-all definition in App.tsx handles these types globally.
-
 // --- Visual Constants ---
 const OBSTACLE_HEIGHT = 1.6;
 
@@ -55,7 +52,6 @@ const SHADOW_DEFAULT_GEO = new THREE.CircleGeometry(0.8, 6);
 const SHADOW_BARRIER_GEO = new THREE.PlaneGeometry(2.4, 0.5);
 
 const PARTICLE_COUNT = 600;
-// Interval 28 ensures ~45 vaccines in 60s at base speed 21 (distance 1260 / 28 = 45)
 const VACCINE_INTERVAL_BASE = 28; 
 
 // High Contrast Neon Colors
@@ -153,6 +149,24 @@ export const LevelManager: React.FC = () => {
   
   const lastObstacleType = useRef<ObjectType | null>(null);
   const consecutiveObstacleCount = useRef(0);
+
+  // Re-map existing vaccines to Gold when 19th is collected
+  useEffect(() => {
+    if (vaccineCount >= 19) {
+      let changed = false;
+      const updated = objectsRef.current.map(obj => {
+        if (obj.type === ObjectType.VACCINE && !obj.isFinalVaccine) {
+          changed = true;
+          return { ...obj, isFinalVaccine: true, color: '#ffd700' };
+        }
+        return obj;
+      });
+      if (changed) {
+        objectsRef.current = updated;
+        setRenderTrigger(t => t + 1);
+      }
+    }
+  }, [vaccineCount]);
 
   useEffect(() => {
     const isRestart = status === GameStatus.PLAYING && prevStatus.current === GameStatus.GAME_OVER;
@@ -276,7 +290,6 @@ export const LevelManager: React.FC = () => {
     else furthestZ = -20;
 
     if (furthestZ > -SPAWN_DISTANCE) {
-         // Obstacle gap reduced to increase frequency by 30%
          const minGap = 12 + (speed * 0.3); 
          const spawnZ = Math.min(furthestZ - minGap, -SPAWN_DISTANCE);
          
@@ -287,9 +300,8 @@ export const LevelManager: React.FC = () => {
              const isItemDue = distanceTraveled.current >= nextItemDistance.current;
              if (isItemDue) {
                  const currentCount = useStore.getState().vaccineCount;
-                 const isFinal = currentCount === 19;
+                 const isFinal = currentCount >= 19;
                  
-                 // 50% jump collection requirement
                  const isHigh = Math.random() < 0.5;
                  const spawnY = isHigh ? 3.5 : 1.0;
 
@@ -298,7 +310,7 @@ export const LevelManager: React.FC = () => {
                     type: ObjectType.VACCINE,
                     position: [spawnX, spawnY, spawnZ], 
                     active: true,
-                    color: COLOR_VACCINE,
+                    color: isFinal ? '#ffd700' : COLOR_VACCINE,
                     isFinalVaccine: isFinal
                  });
                  nextItemDistance.current = distanceTraveled.current + VACCINE_INTERVAL_BASE;
@@ -361,9 +373,9 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             const baseHeight = data.position[1];
 
             if (data.type === ObjectType.VACCINE) {
-                const spinSpeed = data.isFinalVaccine ? 5.0 : 2.0;
-                const bobSpeed = data.isFinalVaccine ? 8 : 4;
-                const bobHeight = data.isFinalVaccine ? 0.2 : 0.1;
+                const spinSpeed = data.isFinalVaccine ? 8.0 : 2.0;
+                const bobSpeed = data.isFinalVaccine ? 10 : 4;
+                const bobHeight = data.isFinalVaccine ? 0.4 : 0.1;
                 visualRef.current.rotation.y += delta * spinSpeed;
                 visualRef.current.position.y = baseHeight + Math.sin(time * bobSpeed) * bobHeight;
             } else {
@@ -401,11 +413,11 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
         if (data.isFinalVaccine) {
             return {
                 glass: new THREE.MeshPhysicalMaterial({
-                    color: '#ffd700', metalness: 0.9, roughness: 0.05, transmission: 0.5, transparent: true, thickness: 1.0, emissive: '#ff8800', emissiveIntensity: 6.0, clearcoat: 1.0, clearcoatRoughness: 0.1
+                    color: '#ffd700', metalness: 0.9, roughness: 0.05, transmission: 0.5, transparent: true, thickness: 1.0, emissive: '#ffaa00', emissiveIntensity: 10.0, clearcoat: 1.0, clearcoatRoughness: 0.1
                 }),
-                metal: new THREE.MeshStandardMaterial({ color: '#ffd700', metalness: 1.0, roughness: 0.02, emissive: '#ffcc00', emissiveIntensity: 1.5 }),
+                metal: new THREE.MeshStandardMaterial({ color: '#ffcc00', metalness: 1.0, roughness: 0.02, emissive: '#ffd700', emissiveIntensity: 2.5 }),
                 liquid: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 1.0 }),
-                needle: new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 3.0, metalness: 0.0, roughness: 0.0 })
+                needle: new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 5.0, metalness: 0.0, roughness: 0.0 })
             };
         }
         return {
@@ -432,7 +444,6 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
 
             <group ref={visualRef} position={[0, data.position[1], 0]}>
                 
-                {/* --- GROUND BACTERIA (NEON GREEN - JUMP OVER) --- */}
                 {data.type === ObjectType.OBSTACLE && (
                     <group>
                         <mesh geometry={BACTERIA_CORE_GEO}>
@@ -451,7 +462,6 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     </group>
                 )}
 
-                {/* --- FLOATING BACTERIA (NEON MAGENTA - SLIDE UNDER) --- */}
                 {data.type === ObjectType.HIGH_BARRIER && (
                     <group>
                         <mesh geometry={VIRUS_BODY_GEO} rotation={[0, 0, Math.PI / 2]}>
@@ -467,7 +477,6 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     </group>
                 )}
 
-                {/* --- VACCINE --- */}
                 {data.type === ObjectType.VACCINE && vaccineMaterial && (
                     <group scale={[1.4, 1.4, 1.4]} rotation={[0, 0, Math.PI / 6]}>
                         <mesh geometry={VACCINE_BODY_GEO} material={vaccineMaterial.glass} />
