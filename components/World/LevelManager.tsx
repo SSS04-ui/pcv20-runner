@@ -12,7 +12,7 @@ import { useStore } from '../../store';
 import { GameObject, ObjectType, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, LANE_WIDTH } from '../../types';
 import { audio } from '../System/Audio';
 
-// --- Bacteria Visual Constants ---
+// --- Visual Constants ---
 const OBSTACLE_HEIGHT = 1.6;
 
 // Ground Bacteria (Jump Over)
@@ -51,6 +51,7 @@ const SHADOW_DEFAULT_GEO = new THREE.CircleGeometry(0.8, 6);
 const SHADOW_BARRIER_GEO = new THREE.PlaneGeometry(2.4, 0.5);
 
 const PARTICLE_COUNT = 600;
+// Interval 28 ensures ~45 vaccines in 60s at base speed 21 (distance 1260 / 28 = 45)
 const VACCINE_INTERVAL_BASE = 28; 
 
 // High Contrast Neon Colors
@@ -271,6 +272,7 @@ export const LevelManager: React.FC = () => {
     else furthestZ = -20;
 
     if (furthestZ > -SPAWN_DISTANCE) {
+         // Obstacle gap reduced to increase frequency by 30%
          const minGap = 12 + (speed * 0.3); 
          const spawnZ = Math.min(furthestZ - minGap, -SPAWN_DISTANCE);
          
@@ -283,6 +285,7 @@ export const LevelManager: React.FC = () => {
                  const currentCount = useStore.getState().vaccineCount;
                  const isFinal = currentCount === 19;
                  
+                 // 50% jump collection requirement
                  const isHigh = Math.random() < 0.5;
                  const spawnY = isHigh ? 3.5 : 1.0;
 
@@ -299,7 +302,7 @@ export const LevelManager: React.FC = () => {
              } else {
                 const obstacleType = determineObstacleType();
                 const isBarrier = obstacleType === ObjectType.HIGH_BARRIER;
-                const spawnY = isBarrier ? 1.7 : 0.6; // Higher for sliding clearance, lower for jumping requirement
+                const spawnY = isBarrier ? 1.7 : 0.6; 
                 const newColor = isBarrier ? COLOR_SLIDE : COLOR_JUMP;
                 const storeState = useStore.getState();
                 const showTut = !storeState.seenObstacles.includes(obstacleType);
@@ -360,7 +363,6 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                 visualRef.current.rotation.y += delta * spinSpeed;
                 visualRef.current.position.y = baseHeight + Math.sin(time * bobSpeed) * bobHeight;
             } else {
-                // Organic Wiggling and Pulsing for Bacteria
                 const pulseSpeed = data.type === ObjectType.OBSTACLE ? 10 : 6;
                 const pulse = 1.0 + Math.sin(time * pulseSpeed) * 0.1;
                 visualRef.current.scale.set(pulse, pulse, pulse);
