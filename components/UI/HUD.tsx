@@ -5,7 +5,7 @@
 */
 
 import React from 'react';
-import { Play, Syringe, BarChart3, ChevronLeft, Trash2, Trophy, Star, Clock, Rocket, Zap } from 'lucide-react';
+import { Play, Syringe, BarChart3, ChevronLeft, Trash2, Trophy, Star, Clock, Rocket, Zap, Terminal } from 'lucide-react';
 import { useStore } from '../../store';
 import { GameStatus, RUN_SPEED_BASE } from '../../types';
 import { audio } from '../System/Audio';
@@ -25,6 +25,15 @@ export const HUD: React.FC = () => {
   };
 
   const containerClass = "absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-8 z-50";
+
+  const VersionFooter = () => (
+    <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-30 pointer-events-none">
+        <div className="flex items-center space-x-2 font-mono text-[9px] tracking-[0.2em] text-cyan-500 uppercase">
+            <Terminal className="w-2.5 h-2.5" />
+            <span>Node.js v20.0.0 | PCV20 v1.0.0</span>
+        </div>
+    </div>
+  );
 
   if (status === GameStatus.MENU) {
       return (
@@ -59,6 +68,7 @@ export const HUD: React.FC = () => {
                         </button>
                     </div>
                  </div>
+                 <VersionFooter />
               </div>
           </div>
       );
@@ -67,7 +77,7 @@ export const HUD: React.FC = () => {
   if (status === GameStatus.STATS) {
     return (
         <div className="absolute inset-0 flex items-center justify-center z-[100] bg-black/90 backdrop-blur-md p-4 pointer-events-auto">
-            <div className="w-full max-w-lg bg-[#0a051a] rounded-3xl border border-cyan-500/30 p-6 md:p-8 animate-in zoom-in-95 duration-300 shadow-[0_0_40px_rgba(0,255,255,0.15)]">
+            <div className="relative w-full max-w-lg bg-[#0a051a] rounded-3xl border border-cyan-500/30 p-6 md:p-8 animate-in zoom-in-95 duration-300 shadow-[0_0_40px_rgba(0,255,255,0.15)] overflow-hidden">
                 <div className="flex items-center justify-between mb-8">
                     <button onClick={() => setStatus(GameStatus.MENU)} className="p-2 rounded-full hover:bg-white/10 text-cyan-400 transition-colors"><ChevronLeft className="w-8 h-8" /></button>
                     <h2 className="text-3xl font-black text-white font-cyber tracking-widest">STATISTICS</h2>
@@ -87,9 +97,10 @@ export const HUD: React.FC = () => {
                         <Clock className="w-6 h-6 text-green-400 mb-2" /><span className="text-gray-400 text-[10px] tracking-widest uppercase mb-1">Time Played</span><span className="text-xl font-bold text-white">{formatTime(totalPlayTimeSeconds)}</span>
                     </div>
                 </div>
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center mb-8">
                     <button onClick={() => { if(confirm("Permanently wipe all save data?")) resetPersistentStats(); }} className="text-red-500/50 hover:text-red-500 text-xs flex items-center transition-colors uppercase tracking-[0.2em]"><Trash2 className="w-4 h-4 mr-2" /> Reset All Data</button>
                 </div>
+                <VersionFooter />
             </div>
         </div>
     );
