@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -11,6 +12,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { useStore } from '../../store';
 import { GameObject, ObjectType, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, LANE_WIDTH } from '../../types';
 import { audio } from '../System/Audio';
+
+// Removed redundant declare global JSX.IntrinsicElements block to avoid Duplicate Index Signature errors.
+// The catch-all definition in App.tsx handles these types globally.
 
 // --- Visual Constants ---
 const OBSTACLE_HEIGHT = 1.6;

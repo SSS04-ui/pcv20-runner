@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -9,6 +10,9 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '../../store';
 import { LANE_WIDTH } from '../../types';
+
+// Removed redundant declare global JSX.IntrinsicElements block to avoid Duplicate Index Signature errors.
+// The catch-all definition in App.tsx handles these types globally.
 
 const StarField: React.FC = () => {
   const speed = useStore(state => state.speed);

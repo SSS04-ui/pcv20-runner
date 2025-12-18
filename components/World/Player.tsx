@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -10,6 +11,9 @@ import * as THREE from 'three';
 import { useStore } from '../../store';
 import { LANE_WIDTH, GameStatus, SLIDE_DURATION } from '../../types';
 import { audio } from '../System/Audio';
+
+// Removed redundant declare global JSX.IntrinsicElements block to avoid Duplicate Index Signature errors.
+// The catch-all definition in App.tsx handles these types globally.
 
 const GRAVITY = 50;
 const JUMP_FORCE = 16; 

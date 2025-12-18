@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { GameStatus, RUN_SPEED_BASE, ObjectType } from './types';
@@ -105,7 +104,7 @@ export const useStore = create<GameState>()(
         timeBonus: 0,
         startTime: Date.now(),
         endTime: 0,
-        hasDoubleJump: false,
+        hasDoubleJump: true,
         hasImmortality: false,
         isImmortalityActive: false,
         seenObstacles: []
@@ -125,15 +124,15 @@ export const useStore = create<GameState>()(
         timeBonus: 0,
         startTime: Date.now(),
         endTime: 0,
-        hasDoubleJump: false,
+        hasDoubleJump: true,
         hasImmortality: false,
         isImmortalityActive: false,
         seenObstacles: []
       }),
 
       takeDamage: () => {
-        const { isImmortalityActive } = get();
-        if (isImmortalityActive) return;
+        const { isImmortalityActive, status } = get();
+        if (isImmortalityActive || status !== GameStatus.PLAYING) return;
 
         const endTime = Date.now();
         set({ 
@@ -171,7 +170,6 @@ export const useStore = create<GameState>()(
         
         if (nextCount >= MAX_VACCINES) {
           const endTime = Date.now();
-          // Final score is accumulated vaccine points + remaining time bonus
           const finalTimeBonus = Math.floor(timeLeft * 100);
           set({
               vaccineCount: nextCount,

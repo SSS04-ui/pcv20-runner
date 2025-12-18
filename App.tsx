@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -14,7 +15,9 @@ import { Effects } from './components/World/Effects';
 import { HUD } from './components/UI/HUD';
 import { useStore } from './store';
 
-// Fix for missing JSX types in this environment
+// Fix for missing Three.js JSX types in this environment
+// Consolidating the global JSX declaration here with a catch-all index signature.
+// This allows all R3F elements (group, mesh, etc.) to be recognized globally.
 declare global {
   namespace JSX {
     interface IntrinsicElements {
