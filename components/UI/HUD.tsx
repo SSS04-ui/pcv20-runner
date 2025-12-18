@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -30,10 +31,7 @@ export const HUD: React.FC = () => {
       return (
           <div className="absolute inset-0 flex items-center justify-center z-[100] bg-black/80 backdrop-blur-sm p-4 pointer-events-auto">
               <div className="relative w-full max-w-md rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,255,255,0.2)] border border-white/10 animate-in zoom-in-95 duration-500 bg-[#050011]">
-                 <div className="absolute inset-0">
-                     <img src="https://www.gstatic.com/aistudio/starter-apps/gemini_runner/gemini_runner.png" alt="Gemini Runner Cover" className="w-full h-full object-cover opacity-40" />
-                     <div className="absolute inset-0 bg-gradient-to-t from-[#050011] via-[#050011]/90 to-transparent"></div>
-                 </div>
+                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-950/20 via-transparent to-purple-950/20"></div>
                  <div className="relative z-10 flex flex-col items-center p-6 pt-8 min-h-[420px]">
                     <div className="mb-6 text-center">
                         <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500 font-cyber drop-shadow-[0_0_10px_rgba(0,255,255,0.5)] leading-none">PCV20</h1>
