@@ -12,7 +12,7 @@
     "node": "20.x"
   },
   "dependencies": {
-    "@google/genai": "^0.21.0",
+    "@google/genai": "latest",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
     "@react-three/postprocessing": "^3.0.4",
