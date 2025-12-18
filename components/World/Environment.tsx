@@ -1,10 +1,3 @@
-
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
-*/
-
-
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -68,9 +61,7 @@ const StarField: React.FC = () => {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={count}
-          array={positions}
-          itemSize={3}
+          args={[positions, 3]}
         />
       </bufferGeometry>
       <pointsMaterial

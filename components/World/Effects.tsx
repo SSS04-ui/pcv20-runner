@@ -1,17 +1,11 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
-*/
-
-
 import React from 'react';
 import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 
-export const Effects: React.FC = () => {
+export function Effects() {
   return (
-    <EffectComposer disableNormalPass multisampling={0}>
-      {/* Tighter bloom to avoid fog: High threshold, moderate radius */}
+    /* Changed disableNormalPass to enableNormalPass={false} to fix the property name error */
+    <EffectComposer enableNormalPass={false} multisampling={0}>
       <Bloom 
         luminanceThreshold={0.75} 
         mipmapBlur 
@@ -23,4 +17,4 @@ export const Effects: React.FC = () => {
       <Vignette eskil={false} offset={0.1} darkness={0.5} />
     </EffectComposer>
   );
-};
+}
