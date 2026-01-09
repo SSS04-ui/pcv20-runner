@@ -113,18 +113,16 @@ export const LevelManager: React.FC = () => {
   const totalDistance = useRef(0);
   
   const nextObstacleDistance = useRef(9999); 
-  // Initial speed is 21.0. To spawn at 1s (44s left from 45s), we need 21.0 * 1 = 21.0 distance.
   const nextVaccineDistance = useRef(21); 
 
   const firstSpawnDone = useRef(false);
   const prevMilestonePaused = useRef(false);
   const prevShowPopup = useRef(false);
 
-  // Counters for logic requirements
   const obstaclesSinceLastVaccine = useRef(0);
   const lastVaccineLane = useRef<number | null>(null);
   const consecutiveVaccineLaneCount = useRef(0);
-  const totalSpawnedVaccines = useRef(0); // Track total displayed vaccines
+  const totalSpawnedVaccines = useRef(0);
 
   const getLaneX = (lane: number) => (lane - Math.floor(laneCount / 2)) * LANE_WIDTH;
 
@@ -163,7 +161,6 @@ export const LevelManager: React.FC = () => {
     const currentObjects = objectsRef.current;
     let hasChanges = false;
 
-    // --- Special Initial Barrier Spawn ---
     if (totalDistance.current < 1 && !firstSpawnDone.current) {
         const lane = Math.floor(Math.random() * laneCount);
         currentObjects.push({
@@ -175,12 +172,10 @@ export const LevelManager: React.FC = () => {
         });
         firstSpawnDone.current = true;
         obstaclesSinceLastVaccine.current += 1;
-        // Frequency boost (+30%) for the very first interval
         nextObstacleDistance.current = 21 + (speed * (1.0 / 1.3)); 
         hasChanges = true;
     }
 
-    // --- Special Post-Milestone Barrier Spawn ---
     if (prevMilestonePaused.current === true && isMilestonePaused === false) {
         const lane = Math.floor(Math.random() * laneCount);
         const type = Math.random() > 0.5 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
@@ -226,28 +221,22 @@ export const LevelManager: React.FC = () => {
         if (obj.position[2] > REMOVE_DISTANCE) { currentObjects.splice(i, 1); hasChanges = true; }
     }
 
-    // --- Random Obstacle Spawning with Improved Tri-Phase Acceleration (+30% Frequency in first 10s) ---
     if (totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused) {
         const elapsedTime = (Date.now() - startTime) / 1000;
-        
         let targetReactionTime: number;
         let doubleLaneChance = 0.15; 
-        const freqMultiplier = 1.3; // Obstacle frequency of first 10s increase by 30%
+        const freqMultiplier = 1.3;
 
         if (elapsedTime < 2) {
-            // PHASE 1: Sync (0-2s) - Target 1.0s window / 1.3 ≈ 0.77s
             targetReactionTime = 1.0 / freqMultiplier;
         } else if (elapsedTime < 10) {
-            // PHASE 2: Acceleration (2-10s) - Linear ramp (1.0s -> 0.75s) / 1.3 ≈ 0.77s -> 0.58s
             const progress = (elapsedTime - 2) / 8;
             const baseWindow = 1.0 - (progress * 0.25);
             targetReactionTime = baseWindow / freqMultiplier;
         } else if (elapsedTime < 15) {
-            // PHASE 3: Engagement (10-15s) - Tight 0.7s rhythm
             targetReactionTime = 0.7;
             doubleLaneChance = 0.25; 
         } else {
-            // Challenging late-game curve (Standard Level Logic)
             const baseWindow = 0.8;
             const difficultyReduction = Math.min(0.3, level * 0.05); 
             targetReactionTime = (baseWindow - difficultyReduction) + (Math.random() * 0.15);
@@ -256,7 +245,6 @@ export const LevelManager: React.FC = () => {
         
         const type = Math.random() > 0.4 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
         const isDoubleLane = Math.random() < doubleLaneChance; 
-        
         const safetyBuffer = isDoubleLane ? (speed * 0.4) : 0;
         nextObstacleDistance.current = totalDistance.current + (speed * targetReactionTime) + safetyBuffer;
         
@@ -283,15 +271,11 @@ export const LevelManager: React.FC = () => {
         hasChanges = true;
     }
 
-    // --- High-Frequency Random Vaccine Spawning (1.0s - 2.0s) with 30-vaccine buffer ---
     if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused) {
-        const currentActiveVaccines = currentObjects.filter(o => o.type === ObjectType.VACCINE && o.active).length;
         let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= 2; 
 
-        // Target remains 20, but we display up to 30 encounters (10 buffer vaccines)
         if (meetsBarrierRequirement && totalSpawnedVaccines.current < 30 && vaccineCount < MAX_VACCINES) {
             let lane = Math.floor(Math.random() * laneCount);
-            
             if (consecutiveVaccineLaneCount.current >= 2 && lane === lastVaccineLane.current) {
                 lane = (lane + 1) % laneCount;
             }
@@ -299,7 +283,6 @@ export const LevelManager: React.FC = () => {
             const minGapSeconds = 1.0;
             const maxGapSeconds = 2.0;
             const reactionTime = minGapSeconds + Math.random() * (maxGapSeconds - minGapSeconds);
-            
             const finalStageMult = vaccineCount >= MILESTONE_VACCINE_COUNT ? 1.2 : 1.0;
             const vaccineSpawnGap = (speed * reactionTime) * finalStageMult;
 
@@ -323,7 +306,6 @@ export const LevelManager: React.FC = () => {
                 lastVaccineLane.current = lane;
                 consecutiveVaccineLaneCount.current = 1;
             }
-            
             hasChanges = true;
         } else if (!meetsBarrierRequirement) {
             nextVaccineDistance.current = totalDistance.current + (speed * 0.3); 
@@ -337,7 +319,6 @@ export const LevelManager: React.FC = () => {
         firstSpawnDone.current = false;
         totalDistance.current = 0;
         nextObstacleDistance.current = 9999;
-        // Reset to 21.0 (initial speed 21.0 * 1 second elapsed = 44s left)
         nextVaccineDistance.current = 21;
         prevMilestonePaused.current = false;
         prevShowPopup.current = false;
@@ -368,7 +349,7 @@ const SyringeFigure: React.FC<{ color: string, isFinal?: boolean }> = ({ color, 
                     transparent 
                     opacity={0.6} 
                     roughness={isFinal ? 0.05 : 0} 
-                    metalness={isFinal ? 0.9 : 0.9} 
+                    metalness={0.9} 
                 />
             </mesh>
             <mesh scale={[0.8, 0.7, 0.8]} position={[0, -0.05, 0]} geometry={SYRINGE_BODY_GEO}>
@@ -449,7 +430,11 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     <mesh position={[-1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
                         <meshStandardMaterial color="#64748b" />
                     </mesh>
-                    <group ref={iconRef}><mesh geometry={ICON_GEO}><meshBasicMaterial color={data.color} /></mesh></group>
+                    <group ref={iconRef}>
+                        <mesh geometry={ICON_GEO}>
+                            <meshBasicMaterial color={data.color} />
+                        </mesh>
+                    </group>
                 </group>
             )}
             {data.type === ObjectType.HIGH_BARRIER && (
@@ -466,7 +451,11 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     <mesh position={[-1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
                         <meshStandardMaterial color="#64748b" />
                     </mesh>
-                    <group ref={iconRef} rotation={[0, 0, Math.PI]}><mesh geometry={ICON_GEO}><meshBasicMaterial color={data.color} /></mesh></group>
+                    <group ref={iconRef} rotation={[0, 0, Math.PI]}>
+                        <mesh geometry={ICON_GEO}>
+                            <meshBasicMaterial color={data.color} />
+                        </mesh>
+                    </group>
                 </group>
             )}
             {data.type === ObjectType.VACCINE && <SyringeFigure color={data.color!} isFinal={data.isFinalVaccine} />}

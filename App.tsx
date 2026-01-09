@@ -16,7 +16,6 @@ import { HUD } from './components/UI/HUD';
 import { useStore } from './store';
 
 // Fix for missing Three.js JSX types in this environment
-// Augmented both global JSX and React.JSX to ensure compatibility across different TS configurations.
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -46,23 +45,25 @@ const CameraController = () => {
   const { laneCount } = useStore();
   
   useFrame((state, delta) => {
-    // Determine if screen is narrow (mobile portrait)
     const aspect = size.width / size.height;
-    const isMobile = aspect < 1.2; 
+    const isMobile = aspect < 0.8; // More aggressive mobile check for portrait
 
-    const heightFactor = isMobile ? 2.0 : 0.5;
-    const distFactor = isMobile ? 4.5 : 1.0;
+    // Adjusted factors for mobile visibility
+    const heightFactor = isMobile ? 3.0 : 0.5;
+    const distFactor = isMobile ? 6.0 : 1.0;
+    const verticalOffset = isMobile ? 2.5 : 0;
 
     const extraLanes = Math.max(0, laneCount - 3);
 
-    const targetY = 5.5 + (extraLanes * heightFactor);
-    const targetZ = 8.0 + (extraLanes * distFactor);
+    const targetY = (isMobile ? 8.5 : 5.5) + (extraLanes * heightFactor) + verticalOffset;
+    const targetZ = (isMobile ? 12.0 : 8.0) + (extraLanes * distFactor);
 
     const targetPos = new THREE.Vector3(0, targetY, targetZ);
     
     // Smoothly interpolate camera position
-    camera.position.lerp(targetPos, delta * 2.0);
-    camera.lookAt(0, 0, -30); 
+    camera.position.lerp(targetPos, delta * 3.0);
+    // Look further ahead to keep player in the bottom-middle of the screen on mobile
+    camera.lookAt(0, isMobile ? 1.0 : 0, -30); 
   });
   
   return null;
@@ -91,7 +92,7 @@ function App() {
         shadows
         dpr={[1, 1.5]} 
         gl={{ antialias: false, stencil: false, depth: true, powerPreference: "high-performance" }}
-        camera={{ position: [0, 5.5, 8], fov: 60 }}
+        camera={{ position: [0, 6, 12], fov: 60 }}
       >
         <CameraController />
         <Suspense fallback={null}>
