@@ -23,7 +23,7 @@ export const HUD: React.FC = () => {
     <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-30 pointer-events-none">
         <div className="flex items-center space-x-2 font-mono text-[9px] tracking-[0.2em] text-cyan-800 uppercase">
             <Terminal className="w-2.5 h-2.5" />
-            <span>20價大冒險 v1.7.3 | 臨床協議</span>
+            <span>20價大冒險 v1.7.4 | 臨床協議</span>
         </div>
     </div>
   );
@@ -149,7 +149,7 @@ export const HUD: React.FC = () => {
   const isUltimateStage = vaccineCount >= MILESTONE_VACCINE_COUNT;
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-12 z-50">
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-8 z-50">
         {status === GameStatus.PAUSED && <PauseOverlay />}
         {showLevelUpPopup && (
           <div className="absolute inset-0 flex items-center justify-center z-[600] pointer-events-auto bg-slate-950/40 backdrop-blur-sm animate-in fade-in duration-300">
@@ -166,34 +166,45 @@ export const HUD: React.FC = () => {
              </div>
           </div>
         )}
-        <div className="flex justify-between items-start w-full">
-            <div className={`text-4xl md:text-7xl font-black tracking-tighter ${isUltimateStage ? 'text-red-500' : 'text-slate-900'}`}>
-                {score.toLocaleString()}
-            </div>
-            <div className="flex items-center space-x-3 pointer-events-auto">
-                <div className={`text-3xl md:text-6xl font-black ${timeLeft < 10 ? 'text-red-500 animate-pulse' : (isUltimateStage ? 'text-orange-500' : 'text-slate-900')}`}>
-                    {timeLeft.toFixed(1)}<span className="text-sm md:text-2xl ml-1 text-slate-400 font-bold">秒</span>
+        
+        {/* Top Header Layout */}
+        <div className="flex flex-col w-full space-y-4 md:space-y-6">
+            <div className="flex justify-between items-start w-full">
+                {/* Score */}
+                <div className={`text-3xl md:text-6xl font-black tracking-tighter ${isUltimateStage ? 'text-red-500' : 'text-slate-900'}`}>
+                    {score.toLocaleString()}
                 </div>
-                <button onClick={() => { audio.init(); togglePause(); }} className="p-3 md:p-5 bg-white/80 border rounded-2xl">
-                    {status === GameStatus.PAUSED ? <Play className="w-5 h-5 fill-current" /> : <Pause className="w-5 h-5 fill-current" />}
-                </button>
+                
+                {/* Timer and Controls */}
+                <div className="flex items-center space-x-3 pointer-events-auto">
+                    <div className={`text-2xl md:text-5xl font-black ${timeLeft < 10 ? 'text-red-500 animate-pulse' : (isUltimateStage ? 'text-orange-500' : 'text-slate-900')}`}>
+                        {timeLeft.toFixed(1)}<span className="text-xs md:text-xl ml-1 text-slate-400 font-bold">秒</span>
+                    </div>
+                    <button onClick={() => { audio.init(); togglePause(); }} className="p-2 md:p-4 bg-white/80 border rounded-xl md:rounded-2xl shadow-sm">
+                        {status === GameStatus.PAUSED ? <Play className="w-4 h-4 md:w-5 md:h-5 fill-current" /> : <Pause className="w-4 h-4 md:w-5 md:h-5 fill-current" />}
+                    </button>
+                </div>
+            </div>
+
+            {/* Progress Bar moved to top area */}
+            <div className="w-full flex flex-col items-center">
+                <div className="w-full max-w-md h-2 md:h-3 bg-slate-200/50 rounded-full overflow-hidden shadow-inner border border-white relative">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${isUltimateStage ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-cyan-500 shadow-[0_0_10px_rgba(8,165,233,0.5)]'}`} style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className="flex justify-between w-full max-w-md mt-1 px-1">
+                    <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">疫苗進度</span>
+                    <span className={`text-[8px] md:text-[10px] font-black ${isUltimateStage ? 'text-red-600' : 'text-cyan-600'}`}>{vaccineCount} / {MAX_VACCINES}</span>
+                </div>
             </div>
         </div>
-        <div className="absolute top-[35%] md:top-64 left-1/2 transform -translate-x-1/2 flex flex-col items-center w-full max-w-sm px-8">
-             <div className="w-full h-3 bg-slate-200/50 rounded-full overflow-hidden shadow-inner border border-white">
-                 <div className={`h-full rounded-full transition-all duration-1000 ${isUltimateStage ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${progressPercent}%` }} />
-             </div>
-             <div className="flex justify-between w-full mt-2">
-                <span className="text-[10px] font-black text-slate-400 uppercase">疫苗進度</span>
-                <span className={`text-[11px] font-black ${isUltimateStage ? 'text-red-600' : 'text-cyan-600'}`}>{vaccineCount} / {MAX_VACCINES}</span>
-             </div>
-        </div>
+
+        {/* Bottom Stats */}
         <div className="w-full flex justify-between items-end pb-safe">
-             <div className={`bg-white/90 border border-slate-100 px-4 py-2 rounded-xl text-xs md:text-base font-black ${isUltimateStage ? 'text-red-600' : 'text-slate-900'}`}>
+             <div className={`bg-white/90 border border-slate-100 px-3 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-base font-black ${isUltimateStage ? 'text-red-600' : 'text-slate-900'}`}>
                 LEVEL {level}
              </div>
-             <div className="bg-white/90 border border-slate-100 px-4 py-2 rounded-xl">
-                <Zap className={`w-4 h-4 ${isUltimateStage ? 'text-red-500' : 'text-cyan-500'}`} />
+             <div className="bg-white/90 border border-slate-100 px-3 py-1.5 md:px-4 md:py-2 rounded-xl">
+                <Zap className={`w-3 h-3 md:w-4 md:h-4 ${isUltimateStage ? 'text-red-500' : 'text-cyan-500'}`} />
              </div>
         </div>
     </div>
