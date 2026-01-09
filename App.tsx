@@ -46,61 +46,21 @@ const CameraController = () => {
   
   useFrame((state, delta) => {
     const aspect = size.width / size.height;
-    const isMobile = aspect < 0.8; // More aggressive mobile check for portrait
+    const isMobile = aspect < 1.0; 
 
-    // Adjusted factors for mobile visibility
-    const heightFactor = isMobile ? 3.0 : 0.5;
-    const distFactor = isMobile ? 6.0 : 1.0;
-    const verticalOffset = isMobile ? 2.5 : 0;
+    // Mobile Optimization: Pull back significantly more
+    const heightFactor = isMobile ? 3.5 : 0.5;
+    const distFactor = isMobile ? 7.0 : 1.0;
+    const verticalOffset = isMobile ? 3.0 : 0;
 
     const extraLanes = Math.max(0, laneCount - 3);
 
-    const targetY = (isMobile ? 8.5 : 5.5) + (extraLanes * heightFactor) + verticalOffset;
-    const targetZ = (isMobile ? 12.0 : 8.0) + (extraLanes * distFactor);
+    const targetY = (isMobile ? 10.5 : 5.5) + (extraLanes * heightFactor) + verticalOffset;
+    const targetZ = (isMobile ? 14.5 : 8.0) + (extraLanes * distFactor);
 
     const targetPos = new THREE.Vector3(0, targetY, targetZ);
     
     // Smoothly interpolate camera position
-    camera.position.lerp(targetPos, delta * 3.0);
-    // Look further ahead to keep player in the bottom-middle of the screen on mobile
-    camera.lookAt(0, isMobile ? 1.0 : 0, -30); 
-  });
-  
-  return null;
-};
-
-function Scene() {
-  return (
-    <>
-        <Environment />
-        <group>
-            <group userData={{ isPlayer: true }} name="PlayerGroup">
-                 <Player />
-            </group>
-            <LevelManager />
-        </group>
-        <Effects />
-    </>
-  );
-}
-
-function App() {
-  return (
-    <div className="relative w-full h-screen bg-black overflow-hidden select-none">
-      <HUD />
-      <Canvas
-        shadows
-        dpr={[1, 1.5]} 
-        gl={{ antialias: false, stencil: false, depth: true, powerPreference: "high-performance" }}
-        camera={{ position: [0, 6, 12], fov: 60 }}
-      >
-        <CameraController />
-        <Suspense fallback={null}>
-            <Scene />
-        </Suspense>
-      </Canvas>
-    </div>
-  );
-}
-
-export default App;
+    camera.position.lerp(targetPos, delta * 4.0);
+    
+    // Look further ahead and slightly lower than the horizon on mobile to keep player
