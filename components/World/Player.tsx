@@ -149,18 +149,18 @@ export const Player: React.FC = () => {
       const deltaY = touchEnd.y - touchStart.current.y;
       const swipeThreshold = 30;
 
-      // Check if horizontal swipe or vertical swipe is more prominent
+      // Determine axis
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        // Horizontal
+        // Horizontal swipe
         if (Math.abs(deltaX) > swipeThreshold) {
           if (deltaX > 0) moveLane(1);
           else moveLane(-1);
         }
       } else {
-        // Vertical
+        // Vertical swipe
         if (Math.abs(deltaY) > swipeThreshold) {
-          if (deltaY < 0) triggerJump(); // Swipe up to jump
-          else triggerSlide(); // Swipe down to slide
+          if (deltaY < 0) triggerJump(); // Swipe up
+          else triggerSlide(); // Swipe down
         }
       }
     };

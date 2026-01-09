@@ -391,7 +391,8 @@ const SyringeFigure: React.FC<{ color: string, isFinal?: boolean }> = ({ color, 
             </mesh>
             <mesh position={[0, -0.32, 0]} geometry={SYRINGE_GRIP_GEO}>
                 <meshStandardMaterial color={isFinal ? "#fbbf24" : "#ccc"} metalness={1} />
-            </group>
+            </mesh>
+        </group>
     );
 };
 
