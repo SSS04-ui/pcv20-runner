@@ -4,92 +4,70 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { v4 as uuidv4 } from 'uuid';
-import { useStore } from '../../store';
+import { useStore, MAX_VACCINES, MILESTONE_VACCINE_COUNT } from '../../store';
 import { GameObject, ObjectType, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, LANE_WIDTH } from '../../types';
 import { audio } from '../System/Audio';
 
-// --- Visual Constants ---
-const OBSTACLE_HEIGHT = 1.6;
+// --- GEOMETRY DEFINITIONS ---
 
-// Ground Bacteria (Jump Over)
-const BACTERIA_CORE_GEO = new THREE.IcosahedronGeometry(0.6, 2);
-const CILIA_GEO = new THREE.ConeGeometry(0.05, 0.4, 6);
-const BACTERIA_BASE_RING = new THREE.TorusGeometry(0.7, 0.04, 8, 32);
+const SYRINGE_BODY_GEO = new THREE.CylinderGeometry(0.12, 0.12, 0.6, 12);
+const SYRINGE_CAP_GEO = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 12);
+const SYRINGE_NEEDLE_GEO = new THREE.CylinderGeometry(0.01, 0.01, 0.3, 8);
+const SYRINGE_PLUNGER_GEO = new THREE.CylinderGeometry(0.04, 0.04, 0.4, 8);
+const SYRINGE_GRIP_GEO = new THREE.BoxGeometry(0.3, 0.04, 0.1);
+const SYRINGE_OUTLINE_GEO = new THREE.CylinderGeometry(0.18, 0.18, 0.65, 12);
 
-// High Bacteria (Slide Under)
-const VIRUS_BODY_GEO = new THREE.CapsuleGeometry(0.35, 1.4, 8, 16); // Horizontal barrier
-const TENTACLE_GEO = new THREE.CapsuleGeometry(0.04, 0.7, 4, 8);
+const HURDLE_BASE_GEO = new THREE.BoxGeometry(3.3, 0.15, 0.5);
+const HURDLE_TOP_BAR_GEO = new THREE.BoxGeometry(3.3, 0.2, 0.2);
+const HURDLE_POST_GEO = new THREE.CylinderGeometry(0.1, 0.15, 0.6, 8);
 
-// Indicator Geometries
+const GATE_TOP_HOUSING_GEO = new THREE.BoxGeometry(3.4, 0.6, 0.8);
+const GATE_EMITTER_GEO = new THREE.CylinderGeometry(0.06, 0.06, 0.2, 8);
+const GATE_SIDE_POST_GEO = new THREE.BoxGeometry(0.25, 3.5, 0.4);
+
 const ARROW_SHAPE = new THREE.Shape();
-ARROW_SHAPE.moveTo(0, 0.5);
+ARROW_SHAPE.moveTo(0, 0.4);
 ARROW_SHAPE.lineTo(0.3, 0);
 ARROW_SHAPE.lineTo(0.12, 0);
-ARROW_SHAPE.lineTo(0.12, -0.5);
-ARROW_SHAPE.lineTo(-0.12, -0.5);
+ARROW_SHAPE.lineTo(0.12, -0.4);
+ARROW_SHAPE.lineTo(-0.12, -0.4);
 ARROW_SHAPE.lineTo(-0.12, 0);
 ARROW_SHAPE.lineTo(-0.3, 0);
-ARROW_SHAPE.lineTo(0, 0.5);
-const ARROW_GEO = new THREE.ExtrudeGeometry(ARROW_SHAPE, { depth: 0.1, bevelEnabled: false });
-ARROW_GEO.center();
+ARROW_SHAPE.lineTo(0, 0.4);
+const ICON_GEO = new THREE.ExtrudeGeometry(ARROW_SHAPE, { depth: 0.1, bevelEnabled: false });
+ICON_GEO.center();
 
-// Vaccine Geometries
-const VACCINE_BODY_GEO = new THREE.CylinderGeometry(0.25, 0.25, 0.8, 12);
-const VACCINE_LIQUID_GEO = new THREE.CylinderGeometry(0.20, 0.20, 0.65, 12);
-const VACCINE_CAP_GEO = new THREE.CylinderGeometry(0.28, 0.28, 0.15, 12);
-const VACCINE_NEEDLE_GEO = new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6);
-const VACCINE_PLUNGER_GEO = new THREE.CylinderGeometry(0.22, 0.22, 0.12, 12);
-const VACCINE_ROD_GEO = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 8);
-const VACCINE_HANDLE_GEO = new THREE.CylinderGeometry(0.25, 0.25, 0.05, 12);
+const SHADOW_GEO = new THREE.CircleGeometry(1.2, 32);
+const PARTICLE_COUNT = 300;
 
-const SHADOW_ITEM_GEO = new THREE.PlaneGeometry(1.0, 1.0);
-const SHADOW_DEFAULT_GEO = new THREE.CircleGeometry(0.8, 6);
-const SHADOW_BARRIER_GEO = new THREE.PlaneGeometry(2.4, 0.5);
-
-const PARTICLE_COUNT = 600;
-const VACCINE_INTERVAL_BASE = 28; 
-
-// High Contrast Neon Colors
-const COLOR_JUMP = '#00FF41'; // Matrix Green (Ground)
-const COLOR_SLIDE = '#FF00FF'; // Neon Magenta (High)
-const COLOR_VACCINE = '#00CCFF'; // Electric Blue
+const COLOR_JUMP = '#10b981'; // Green for Jump
+const COLOR_SLIDE = '#f43f5e'; // Rose/Red for Slide
+const COLOR_VACCINE = '#0ea5e9'; 
+const COLOR_GOLD = '#fbbf24';
 
 const ParticleSystem: React.FC = () => {
     const mesh = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
     const particles = useMemo(() => new Array(PARTICLE_COUNT).fill(0).map(() => ({
-        life: 0,
-        pos: new THREE.Vector3(),
-        vel: new THREE.Vector3(),
-        rot: new THREE.Vector3(),
-        rotVel: new THREE.Vector3(),
-        color: new THREE.Color()
+        life: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3(), color: new THREE.Color()
     })), []);
 
     useEffect(() => {
         const handleExplosion = (e: CustomEvent) => {
             const { position, color } = e.detail;
             let spawned = 0;
-            const burstAmount = 40; 
             for(let i = 0; i < PARTICLE_COUNT; i++) {
                 const p = particles[i];
                 if (p.life <= 0) {
-                    p.life = 1.0 + Math.random() * 0.5; 
+                    p.life = 1.0; 
                     p.pos.set(position[0], position[1], position[2]);
-                    const theta = Math.random() * Math.PI * 2;
-                    const phi = Math.acos(2 * Math.random() - 1);
-                    const speed = 2 + Math.random() * 10;
-                    p.vel.set(Math.sin(phi) * Math.cos(theta), Math.sin(phi) * Math.sin(theta), Math.cos(phi)).multiplyScalar(speed);
-                    p.rot.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-                    p.rotVel.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(5);
+                    p.vel.set((Math.random()-0.5)*15, (Math.random()-0.5)*15, (Math.random()-0.5)*15);
                     p.color.set(color);
-                    spawned++;
-                    if (spawned >= burstAmount) break;
+                    if (++spawned > 40) break;
                 }
             }
         };
@@ -98,25 +76,19 @@ const ParticleSystem: React.FC = () => {
     }, [particles]);
 
     useFrame((state, delta) => {
-        if (!mesh.current) return;
-        const safeDelta = Math.min(delta, 0.1);
+        const { status, showLevelUpPopup } = useStore.getState();
+        if (!mesh.current || status === GameStatus.PAUSED || showLevelUpPopup) return;
         particles.forEach((p, i) => {
             if (p.life > 0) {
-                p.life -= safeDelta * 1.5;
-                p.pos.addScaledVector(p.vel, safeDelta);
-                p.vel.y -= safeDelta * 5; 
-                p.vel.multiplyScalar(0.98);
-                p.rot.x += p.rotVel.x * safeDelta;
-                p.rot.y += p.rotVel.y * safeDelta;
+                p.life -= delta * 1.5;
+                p.pos.addScaledVector(p.vel, delta);
                 dummy.position.copy(p.pos);
-                const scale = Math.max(0, p.life * 0.25);
-                dummy.scale.set(scale, scale, scale);
-                dummy.rotation.set(p.rot.x, p.rot.y, p.rot.z);
+                dummy.scale.setScalar(p.life * 0.4);
                 dummy.updateMatrix();
                 mesh.current!.setMatrixAt(i, dummy.matrix);
                 mesh.current!.setColorAt(i, p.color);
             } else {
-                dummy.scale.set(0,0,0);
+                dummy.scale.setScalar(0);
                 dummy.updateMatrix();
                 mesh.current!.setMatrixAt(i, dummy.matrix);
             }
@@ -127,368 +99,376 @@ const ParticleSystem: React.FC = () => {
 
     return (
         <instancedMesh ref={mesh} args={[undefined, undefined, PARTICLE_COUNT]}>
-            <octahedronGeometry args={[0.5, 0]} />
-            <meshBasicMaterial toneMapped={false} transparent opacity={0.9} />
+            <sphereGeometry args={[0.2, 8, 8]} />
+            <meshBasicMaterial toneMapped={false} />
         </instancedMesh>
     );
 };
 
 export const LevelManager: React.FC = () => {
-  const { 
-    status, speed, collectVaccine, level, vaccineCount, tick, laneCount
-  } = useStore();
-  
+  const { status, speed, collectVaccine, level, tick, laneCount, vaccineCount, showLevelUpPopup, isMilestonePaused, startTime } = useStore();
   const objectsRef = useRef<GameObject[]>([]);
-  const [renderTrigger, setRenderTrigger] = useState(0);
-  const prevStatus = useRef(status);
-  const prevLevel = useRef(level);
-
+  const [, setRenderTrigger] = useState(0);
   const playerObjRef = useRef<THREE.Object3D | null>(null);
-  const distanceTraveled = useRef(0);
-  const nextItemDistance = useRef(VACCINE_INTERVAL_BASE);
+  const totalDistance = useRef(0);
   
-  const lastObstacleType = useRef<ObjectType | null>(null);
-  const consecutiveObstacleCount = useRef(0);
+  const nextObstacleDistance = useRef(9999); 
+  // Initial speed is 21.0. To spawn at 1s (44s left from 45s), we need 21.0 * 1 = 21.0 distance.
+  const nextVaccineDistance = useRef(21); 
 
-  // Re-map existing vaccines to Gold when 19th is collected
-  useEffect(() => {
-    if (vaccineCount >= 19) {
-      let changed = false;
-      const updated = objectsRef.current.map(obj => {
-        if (obj.type === ObjectType.VACCINE && !obj.isFinalVaccine) {
-          changed = true;
-          return { ...obj, isFinalVaccine: true, color: '#ffd700' };
-        }
-        return obj;
-      });
-      if (changed) {
-        objectsRef.current = updated;
-        setRenderTrigger(t => t + 1);
-      }
-    }
-  }, [vaccineCount]);
+  const firstSpawnDone = useRef(false);
+  const prevMilestonePaused = useRef(false);
+  const prevShowPopup = useRef(false);
 
-  useEffect(() => {
-    const isRestart = status === GameStatus.PLAYING && prevStatus.current === GameStatus.GAME_OVER;
-    const isMenuReset = status === GameStatus.MENU;
-    const isLevelUp = level !== prevLevel.current && status === GameStatus.PLAYING;
-    const isVictoryReset = status === GameStatus.PLAYING && prevStatus.current === GameStatus.VICTORY;
+  // Counters for logic requirements
+  const obstaclesSinceLastVaccine = useRef(0);
+  const lastVaccineLane = useRef<number | null>(null);
+  const consecutiveVaccineLaneCount = useRef(0);
+  const totalSpawnedVaccines = useRef(0); // Track total displayed vaccines
 
-    if (isMenuReset || isRestart || isVictoryReset) {
-        objectsRef.current = [];
-        setRenderTrigger(t => t + 1);
-        distanceTraveled.current = 0;
-        nextItemDistance.current = VACCINE_INTERVAL_BASE;
-        lastObstacleType.current = null;
-        consecutiveObstacleCount.current = 0;
-    } else if (isLevelUp && level > 1) {
-        objectsRef.current = objectsRef.current.filter(obj => obj.position[2] > -80);
-        setRenderTrigger(t => t + 1);
-    }
-    prevStatus.current = status;
-    prevLevel.current = level;
-  }, [status, level]);
+  const getLaneX = (lane: number) => (lane - Math.floor(laneCount / 2)) * LANE_WIDTH;
 
   useFrame((state, delta) => {
       if (status === GameStatus.PLAYING) {
           tick(delta);
-      }
-      if (!playerObjRef.current) {
-          const group = state.scene.getObjectByName('PlayerGroup');
-          if (group && group.children.length > 0) {
-              playerObjRef.current = group.children[0];
+          if (!playerObjRef.current) {
+              const group = state.scene.getObjectByName('PlayerGroup');
+              if (group && group.children.length > 0) playerObjRef.current = group.children[0];
           }
       }
   });
 
-  const determineObstacleType = () => {
-      let obstacleType = ObjectType.OBSTACLE;
-      if (lastObstacleType.current !== null && consecutiveObstacleCount.current >= 2) {
-          obstacleType = lastObstacleType.current === ObjectType.OBSTACLE ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
-      } else {
-          obstacleType = Math.random() < 0.5 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
-      }
-      if (lastObstacleType.current === obstacleType) {
-          consecutiveObstacleCount.current += 1;
-      } else {
-          consecutiveObstacleCount.current = 1;
-      }
-      lastObstacleType.current = obstacleType;
-      return obstacleType;
-  };
-
   useFrame((state, delta) => {
     if (status !== GameStatus.PLAYING) return;
 
-    const safeDelta = Math.min(delta, 0.05); 
-    const dist = speed * safeDelta;
-    distanceTraveled.current += dist;
+    if (showLevelUpPopup && !prevShowPopup.current) {
+        objectsRef.current = objectsRef.current.filter(o => o.type === ObjectType.VACCINE);
+        setRenderTrigger(t => t + 1);
+    }
+    prevShowPopup.current = showLevelUpPopup;
 
-    let hasChanges = false;
-    let playerPos = new THREE.Vector3(0, 0, 0);
-    let isSliding = false;
+    if (showLevelUpPopup) return;
     
+    const safeDelta = Math.min(delta, 0.05); 
+    const stepDist = speed * safeDelta;
+    totalDistance.current += stepDist;
+
+    let playerPos = new THREE.Vector3();
+    let isSliding = false;
     if (playerObjRef.current) {
         playerObjRef.current.getWorldPosition(playerPos);
         isSliding = playerObjRef.current.userData.isSliding || false;
     }
 
     const currentObjects = objectsRef.current;
-    const keptObjects: GameObject[] = [];
+    let hasChanges = false;
 
-    for (const obj of currentObjects) {
-        const moveMult = obj.speedMultiplier || 1.0;
-        const moveAmount = dist * moveMult;
-        obj.position[2] += moveAmount;
-        
-        let keep = true;
+    // --- Special Initial Barrier Spawn ---
+    if (totalDistance.current < 1 && !firstSpawnDone.current) {
+        const lane = Math.floor(Math.random() * laneCount);
+        currentObjects.push({
+            id: 'initial-barrier',
+            type: ObjectType.OBSTACLE,
+            position: [getLaneX(lane), 0.4, -21], 
+            active: true,
+            color: COLOR_JUMP
+        });
+        firstSpawnDone.current = true;
+        obstaclesSinceLastVaccine.current += 1;
+        // Frequency boost (+30%) for the very first interval
+        nextObstacleDistance.current = 21 + (speed * (1.0 / 1.3)); 
+        hasChanges = true;
+    }
+
+    // --- Special Post-Milestone Barrier Spawn ---
+    if (prevMilestonePaused.current === true && isMilestonePaused === false) {
+        const lane = Math.floor(Math.random() * laneCount);
+        const type = Math.random() > 0.5 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
+        currentObjects.push({
+            id: uuidv4(),
+            type,
+            position: [getLaneX(lane), type === ObjectType.HIGH_BARRIER ? 2.5 : 0.4, -speed],
+            active: true,
+            color: type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP
+        });
+        obstaclesSinceLastVaccine.current += 1;
+        nextObstacleDistance.current = totalDistance.current + (speed * 1.2); 
+        hasChanges = true;
+    }
+    prevMilestonePaused.current = isMilestonePaused;
+
+    for (let i = currentObjects.length - 1; i >= 0; i--) {
+        const obj = currentObjects[i];
+        obj.position[2] += stepDist;
         if (obj.active) {
-            const inZZone = (obj.position[2] > playerPos.z - 1.0) && (obj.position[2] < playerPos.z + 1.0);
-            const laneDiff = Math.abs(obj.position[0] - playerPos.x);
-            const inLane = laneDiff < 1.0;
-
-            if (inZZone && inLane) {
-                 const isVaccine = obj.type === ObjectType.VACCINE;
-                 if (!isVaccine) {
-                     let playerBottom = playerPos.y;
-                     let playerTop = playerPos.y + 1.6; 
-                     if (isSliding) playerTop = playerPos.y + 0.5;
-                     let objBottom = 0;
-                     let objTop = 0;
-                     switch(obj.type) {
-                        case ObjectType.OBSTACLE: objBottom = 0; objTop = 1.3; break;
-                        case ObjectType.HIGH_BARRIER: objBottom = 1.1; objTop = 2.4; break;
-                     }
-                     if ((playerBottom < objTop) && (playerTop > objBottom)) { 
-                         window.dispatchEvent(new Event('player-hit'));
-                         obj.active = false; 
-                         hasChanges = true;
-                     }
-                 } else {
-                     const dy = Math.abs(obj.position[1] - playerPos.y);
-                     if (dy < 2.0) { 
-                        collectVaccine();
-                        audio.playLetterCollect(); 
-                        window.dispatchEvent(new CustomEvent('particle-burst', { 
-                            detail: { position: obj.position, color: obj.isFinalVaccine ? '#ffcc00' : (obj.color || '#00ffff') } 
-                        }));
-                        obj.active = false;
-                        hasChanges = true;
-                     }
-                 }
+            const inZ = Math.abs(obj.position[2] - playerPos.z) < 1.0;
+            const inX = Math.abs(obj.position[0] - playerPos.x) < 1.4;
+            
+            if (inZ && inX) {
+                if (obj.type === ObjectType.VACCINE) {
+                    collectVaccine();
+                    obstaclesSinceLastVaccine.current = 0;
+                    audio.playLetterCollect();
+                    window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: obj.color } }));
+                    obj.active = false;
+                } else if (!isMilestonePaused) {
+                    let hit = false;
+                    if (obj.type === ObjectType.OBSTACLE && playerPos.y < 1.2) hit = true; 
+                    if (obj.type === ObjectType.HIGH_BARRIER && !isSliding) hit = true; 
+                    if (hit) { 
+                        window.dispatchEvent(new Event('player-hit')); 
+                        obj.active = false; 
+                    }
+                }
+                hasChanges = true;
             }
         }
-        if (obj.position[2] > REMOVE_DISTANCE) {
-            keep = false;
-            hasChanges = true;
+        if (obj.position[2] > REMOVE_DISTANCE) { currentObjects.splice(i, 1); hasChanges = true; }
+    }
+
+    // --- Random Obstacle Spawning with Improved Tri-Phase Acceleration (+30% Frequency in first 10s) ---
+    if (totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused) {
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        
+        let targetReactionTime: number;
+        let doubleLaneChance = 0.15; 
+        const freqMultiplier = 1.3; // Obstacle frequency of first 10s increase by 30%
+
+        if (elapsedTime < 2) {
+            // PHASE 1: Sync (0-2s) - Target 1.0s window / 1.3 ≈ 0.77s
+            targetReactionTime = 1.0 / freqMultiplier;
+        } else if (elapsedTime < 10) {
+            // PHASE 2: Acceleration (2-10s) - Linear ramp (1.0s -> 0.75s) / 1.3 ≈ 0.77s -> 0.58s
+            const progress = (elapsedTime - 2) / 8;
+            const baseWindow = 1.0 - (progress * 0.25);
+            targetReactionTime = baseWindow / freqMultiplier;
+        } else if (elapsedTime < 15) {
+            // PHASE 3: Engagement (10-15s) - Tight 0.7s rhythm
+            targetReactionTime = 0.7;
+            doubleLaneChance = 0.25; 
+        } else {
+            // Challenging late-game curve (Standard Level Logic)
+            const baseWindow = 0.8;
+            const difficultyReduction = Math.min(0.3, level * 0.05); 
+            targetReactionTime = (baseWindow - difficultyReduction) + (Math.random() * 0.15);
+            doubleLaneChance = 0.2 + Math.min(0.3, level * 0.03);
         }
-        if (keep) keptObjects.push(obj);
-    }
+        
+        const type = Math.random() > 0.4 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
+        const isDoubleLane = Math.random() < doubleLaneChance; 
+        
+        const safetyBuffer = isDoubleLane ? (speed * 0.4) : 0;
+        nextObstacleDistance.current = totalDistance.current + (speed * targetReactionTime) + safetyBuffer;
+        
+        if (isDoubleLane) {
+            const laneA = Math.floor(Math.random() * laneCount);
+            let laneB = (laneA + 1) % laneCount;
+            if (Math.random() > 0.5) laneB = (laneA + 2) % laneCount;
 
-    let furthestZ = 0;
-    if (keptObjects.length > 0) furthestZ = Math.min(...keptObjects.map(o => o.position[2]));
-    else furthestZ = -20;
-
-    if (furthestZ > -SPAWN_DISTANCE) {
-         const minGap = 12 + (speed * 0.3); 
-         const spawnZ = Math.min(furthestZ - minGap, -SPAWN_DISTANCE);
-         
-         const laneIndex = Math.floor(Math.random() * laneCount);
-         const spawnX = (laneIndex - Math.floor(laneCount / 2)) * LANE_WIDTH;
-
-         if (spawnZ <= -SPAWN_DISTANCE + 10) { 
-             const isItemDue = distanceTraveled.current >= nextItemDistance.current;
-             if (isItemDue) {
-                 const currentCount = useStore.getState().vaccineCount;
-                 const isFinal = currentCount >= 19;
-                 
-                 const isHigh = Math.random() < 0.5;
-                 const spawnY = isHigh ? 3.5 : 1.0;
-
-                 keptObjects.push({
-                    id: uuidv4(),
-                    type: ObjectType.VACCINE,
-                    position: [spawnX, spawnY, spawnZ], 
-                    active: true,
-                    color: isFinal ? '#ffd700' : COLOR_VACCINE,
-                    isFinalVaccine: isFinal
-                 });
-                 nextItemDistance.current = distanceTraveled.current + VACCINE_INTERVAL_BASE;
-                 hasChanges = true;
-             } else {
-                const obstacleType = determineObstacleType();
-                const isBarrier = obstacleType === ObjectType.HIGH_BARRIER;
-                const spawnY = isBarrier ? 1.7 : 0.6; 
-                const newColor = isBarrier ? COLOR_SLIDE : COLOR_JUMP;
-                const storeState = useStore.getState();
-                const showTut = !storeState.seenObstacles.includes(obstacleType);
-                if (showTut) storeState.markObstacleSeen(obstacleType);
-                keptObjects.push({
-                    id: uuidv4(),
-                    type: obstacleType,
-                    position: [spawnX, spawnY, spawnZ],
-                    active: true,
-                    color: newColor,
-                    showTutorial: showTut
+            [laneA, laneB].forEach(l => {
+                currentObjects.push({
+                    id: uuidv4(), type, position: [getLaneX(l), type === ObjectType.HIGH_BARRIER ? 2.5 : 0.4, -SPAWN_DISTANCE],
+                    active: true, color: type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP
                 });
-                hasChanges = true;
-             }
-         }
+            });
+            obstaclesSinceLastVaccine.current += 1;
+        } else {
+            const lane = Math.floor(Math.random() * laneCount);
+            currentObjects.push({
+                id: uuidv4(), type, position: [getLaneX(lane), type === ObjectType.HIGH_BARRIER ? 2.5 : 0.4, -SPAWN_DISTANCE],
+                active: true, color: type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP
+            });
+            obstaclesSinceLastVaccine.current += 1;
+        }
+        hasChanges = true;
     }
-    if (hasChanges) {
-        objectsRef.current = keptObjects;
-        setRenderTrigger(t => t + 1);
+
+    // --- High-Frequency Random Vaccine Spawning (1.0s - 2.0s) with 30-vaccine buffer ---
+    if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused) {
+        const currentActiveVaccines = currentObjects.filter(o => o.type === ObjectType.VACCINE && o.active).length;
+        let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= 2; 
+
+        // Target remains 20, but we display up to 30 encounters (10 buffer vaccines)
+        if (meetsBarrierRequirement && totalSpawnedVaccines.current < 30 && vaccineCount < MAX_VACCINES) {
+            let lane = Math.floor(Math.random() * laneCount);
+            
+            if (consecutiveVaccineLaneCount.current >= 2 && lane === lastVaccineLane.current) {
+                lane = (lane + 1) % laneCount;
+            }
+
+            const minGapSeconds = 1.0;
+            const maxGapSeconds = 2.0;
+            const reactionTime = minGapSeconds + Math.random() * (maxGapSeconds - minGapSeconds);
+            
+            const finalStageMult = vaccineCount >= MILESTONE_VACCINE_COUNT ? 1.2 : 1.0;
+            const vaccineSpawnGap = (speed * reactionTime) * finalStageMult;
+
+            nextVaccineDistance.current = totalDistance.current + vaccineSpawnGap;
+            const isFinal = vaccineCount === (MAX_VACCINES - 1);
+            
+            currentObjects.push({
+                id: uuidv4(), 
+                type: ObjectType.VACCINE, 
+                position: [getLaneX(lane), 1.5, -SPAWN_DISTANCE - 15],
+                active: true, 
+                color: isFinal ? COLOR_GOLD : COLOR_VACCINE,
+                isFinalVaccine: isFinal
+            });
+            
+            totalSpawnedVaccines.current++;
+
+            if (lane === lastVaccineLane.current) {
+                consecutiveVaccineLaneCount.current += 1;
+            } else {
+                lastVaccineLane.current = lane;
+                consecutiveVaccineLaneCount.current = 1;
+            }
+            
+            hasChanges = true;
+        } else if (!meetsBarrierRequirement) {
+            nextVaccineDistance.current = totalDistance.current + (speed * 0.3); 
+        }
     }
+    if (hasChanges) { objectsRef.current = currentObjects; setRenderTrigger(t => t + 1); }
   });
+
+  useEffect(() => {
+    if (status === GameStatus.MENU) {
+        firstSpawnDone.current = false;
+        totalDistance.current = 0;
+        nextObstacleDistance.current = 9999;
+        // Reset to 21.0 (initial speed 21.0 * 1 second elapsed = 44s left)
+        nextVaccineDistance.current = 21;
+        prevMilestonePaused.current = false;
+        prevShowPopup.current = false;
+        obstaclesSinceLastVaccine.current = 0;
+        lastVaccineLane.current = null;
+        consecutiveVaccineLaneCount.current = 0;
+        totalSpawnedVaccines.current = 0;
+    }
+  }, [status]);
 
   return (
     <group>
       <ParticleSystem />
-      {objectsRef.current.map(obj => {
-        if (!obj.active) return null;
-        return <GameEntity key={obj.id} data={obj} />;
-      })}
+      {objectsRef.current.map(obj => obj.active && <GameEntity key={obj.id} data={obj} />)}
     </group>
   );
 };
 
+const SyringeFigure: React.FC<{ color: string, isFinal?: boolean }> = ({ color, isFinal }) => {
+    return (
+        <group rotation={[0.4, 0, 0.4]}>
+            <mesh geometry={SYRINGE_OUTLINE_GEO}>
+                <meshBasicMaterial color={isFinal ? COLOR_GOLD : "#ffffff"} side={THREE.BackSide} />
+            </mesh>
+            <mesh geometry={SYRINGE_BODY_GEO}>
+                <meshStandardMaterial 
+                    color={isFinal ? "#fef3c7" : "#ffffff"} 
+                    transparent 
+                    opacity={0.6} 
+                    roughness={isFinal ? 0.05 : 0} 
+                    metalness={isFinal ? 0.9 : 0.9} 
+                />
+            </mesh>
+            <mesh scale={[0.8, 0.7, 0.8]} position={[0, -0.05, 0]} geometry={SYRINGE_BODY_GEO}>
+                <meshStandardMaterial 
+                    color={color} 
+                    emissive={color} 
+                    emissiveIntensity={isFinal ? 10 : 3} 
+                    metalness={isFinal ? 1 : 0.5}
+                    roughness={isFinal ? 0.1 : 0.5}
+                />
+            </mesh>
+            <mesh position={[0, 0.3, 0]} geometry={SYRINGE_CAP_GEO}>
+                <meshStandardMaterial color={isFinal ? "#f59e0b" : "#ccc"} metalness={1} roughness={0.2} />
+            </mesh>
+            <mesh position={[0, 0.45, 0]} geometry={SYRINGE_NEEDLE_GEO}>
+                <meshStandardMaterial color={isFinal ? "#fbbf24" : "#fff"} metalness={1} />
+            </mesh>
+            <mesh position={[0, -0.4, 0]} geometry={SYRINGE_PLUNGER_GEO}>
+                <meshStandardMaterial color={isFinal ? "#f59e0b" : "#fff"} metalness={1} />
+            </mesh>
+            <mesh position={[0, -0.32, 0]} geometry={SYRINGE_GRIP_GEO}>
+                <meshStandardMaterial color={isFinal ? "#fbbf24" : "#ccc"} metalness={1} />
+            </group>
+    );
+};
+
 const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
     const groupRef = useRef<THREE.Group>(null);
-    const visualRef = useRef<THREE.Group>(null);
-    const arrowRef = useRef<THREE.Group>(null);
-    const ciliaRefs = useRef<THREE.Group[]>([]);
-    
-    const ciliaOffsets = useMemo(() => {
-        return [...Array(14)].map(() => ({
-            rot: [Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI],
-            pos: [ (Math.random()-0.5)*0.8, (Math.random()-0.5)*0.8, (Math.random()-0.5)*0.8 ],
-            speed: 5 + Math.random() * 7
-        }));
-    }, []);
+    const iconRef = useRef<THREE.Group>(null);
+    const warningRef = useRef<THREE.Mesh>(null);
 
-    useFrame((state, delta) => {
-        if (groupRef.current) groupRef.current.position.set(data.position[0], 0, data.position[2]);
-        if (visualRef.current) {
+    useFrame((state) => {
+        const { status, showLevelUpPopup } = useStore.getState();
+        if (status === GameStatus.PAUSED || showLevelUpPopup) return;
+        if (groupRef.current) groupRef.current.position.set(data.position[0], data.position[1], data.position[2]);
+        if (iconRef.current) {
             const time = state.clock.elapsedTime;
-            const baseHeight = data.position[1];
-
-            if (data.type === ObjectType.VACCINE) {
-                const spinSpeed = data.isFinalVaccine ? 8.0 : 2.0;
-                const bobSpeed = data.isFinalVaccine ? 10 : 4;
-                const bobHeight = data.isFinalVaccine ? 0.4 : 0.1;
-                visualRef.current.rotation.y += delta * spinSpeed;
-                visualRef.current.position.y = baseHeight + Math.sin(time * bobSpeed) * bobHeight;
-            } else {
-                const pulseSpeed = data.type === ObjectType.OBSTACLE ? 10 : 6;
-                const pulse = 1.0 + Math.sin(time * pulseSpeed) * 0.1;
-                visualRef.current.scale.set(pulse, pulse, pulse);
-                visualRef.current.position.y = baseHeight + Math.sin(time * 4) * 0.08;
-                
-                if (data.type === ObjectType.OBSTACLE) {
-                    visualRef.current.rotation.y += delta * 2.5;
-                } else {
-                    visualRef.current.rotation.y = Math.sin(time * 0.5) * 0.3;
-                    visualRef.current.rotation.x = Math.cos(time * 0.5) * 0.1;
-                }
-
-                ciliaRefs.current.forEach((ref, i) => {
-                    if (ref) {
-                        const offset = ciliaOffsets[i];
-                        ref.rotation.x = Math.sin(time * offset.speed) * 0.7;
-                        ref.rotation.z = Math.cos(time * offset.speed) * 0.5;
-                    }
-                });
+            iconRef.current.scale.setScalar(1 + Math.sin(time * 8) * 0.1);
+            iconRef.current.position.y = (data.type === ObjectType.HIGH_BARRIER ? -1.0 : 0.8) + Math.sin(time * 4) * 0.05;
+        }
+        if (warningRef.current) {
+            const time = state.clock.elapsedTime;
+            const material = warningRef.current.material as THREE.MeshBasicMaterial;
+            if (material) {
+                material.opacity = 0.2 + Math.abs(Math.sin(time * 5)) * 0.4;
             }
         }
-
-        if (arrowRef.current) {
-            const time = state.clock.elapsedTime;
-            arrowRef.current.position.y = 4.5 + Math.sin(time * 4) * 0.4;
-            arrowRef.current.rotation.y += delta * 2;
+        if (data.type === ObjectType.VACCINE && groupRef.current) {
+            groupRef.current.rotation.y += data.isFinalVaccine ? 0.08 : 0.04;
         }
     });
 
-    const vaccineMaterial = useMemo(() => {
-        if (data.type !== ObjectType.VACCINE) return null;
-        if (data.isFinalVaccine) {
-            return {
-                glass: new THREE.MeshPhysicalMaterial({
-                    color: '#ffd700', metalness: 0.9, roughness: 0.05, transmission: 0.5, transparent: true, thickness: 1.0, emissive: '#ffaa00', emissiveIntensity: 10.0, clearcoat: 1.0, clearcoatRoughness: 0.1
-                }),
-                metal: new THREE.MeshStandardMaterial({ color: '#ffcc00', metalness: 1.0, roughness: 0.02, emissive: '#ffd700', emissiveIntensity: 2.5 }),
-                liquid: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 1.0 }),
-                needle: new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 5.0, metalness: 0.0, roughness: 0.0 })
-            };
-        }
-        return {
-            glass: new THREE.MeshPhysicalMaterial({ color: '#e6ffff', metalness: 0.1, roughness: 0.0, transmission: 0.9, transparent: true, thickness: 0.5, emissive: '#00ffff', emissiveIntensity: 0.8 }),
-            metal: new THREE.MeshStandardMaterial({ color: '#ffffff', metalness: 0.1, roughness: 0.1, emissive: '#ffffff', emissiveIntensity: 0.9 }),
-            liquid: new THREE.MeshBasicMaterial({ color: '#0088ff', transparent: true, opacity: 0.9 }),
-            needle: new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 1.0, metalness: 0.0, roughness: 0.0 })
-        };
-    }, [data.type, data.isFinalVaccine]);
-
     return (
-        <group ref={groupRef} position={[data.position[0], 0, data.position[2]]}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} geometry={data.type === ObjectType.HIGH_BARRIER ? SHADOW_BARRIER_GEO : SHADOW_DEFAULT_GEO}>
-                <meshBasicMaterial color="#000000" opacity={0.4} transparent />
+        <group ref={groupRef}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.02, 0]} geometry={SHADOW_GEO}>
+                <meshBasicMaterial color={data.isFinalVaccine ? COLOR_GOLD : "#000"} opacity={data.isFinalVaccine ? 0.4 : 0.15} transparent />
             </mesh>
 
-            {data.showTutorial && (
-                <group ref={arrowRef} position={[0, 4.5, 0]} rotation={[data.type === ObjectType.OBSTACLE ? 0 : Math.PI, 0, 0]}>
-                    <mesh geometry={ARROW_GEO}>
-                        <meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2.5} toneMapped={false} />
-                    </mesh>
-                </group>
+            {(data.type === ObjectType.OBSTACLE || data.type === ObjectType.HIGH_BARRIER) && (
+              <mesh ref={warningRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.03, 10]}>
+                <planeGeometry args={[LANE_WIDTH - 0.2, 20.0]} />
+                <meshBasicMaterial color={data.color} transparent opacity={0.4} />
+              </mesh>
             )}
 
-            <group ref={visualRef} position={[0, data.position[1], 0]}>
-                
-                {data.type === ObjectType.OBSTACLE && (
-                    <group>
-                        <mesh geometry={BACTERIA_CORE_GEO}>
-                             <meshStandardMaterial color="#001a00" roughness={0.0} metalness={1.0} emissive={data.color} emissiveIntensity={0.3} />
-                        </mesh>
-                        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, -0.4, 0]} geometry={BACTERIA_BASE_RING}>
-                             <meshBasicMaterial color={data.color} transparent opacity={0.9} />
-                        </mesh>
-                        {ciliaOffsets.slice(0, 10).map((offset, i) => (
-                            <group key={i} ref={el => ciliaRefs.current[i] = el!} rotation={offset.rot as any} position={offset.pos as any}>
-                                <mesh geometry={CILIA_GEO} position={[0, 0.4, 0]}>
-                                    <meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={4.0} toneMapped={false} />
-                                </mesh>
-                            </group>
-                        ))}
-                    </group>
-                )}
-
-                {data.type === ObjectType.HIGH_BARRIER && (
-                    <group>
-                        <mesh geometry={VIRUS_BODY_GEO} rotation={[0, 0, Math.PI / 2]}>
-                             <meshStandardMaterial color="#1a001a" roughness={0.0} metalness={1.0} emissive={data.color} emissiveIntensity={0.8} />
-                        </mesh>
-                        {[...Array(8)].map((_, i) => (
-                            <group key={i} ref={el => ciliaRefs.current[i] = el!} position={[(i - 3.5) * 0.35, -0.3, (Math.random()-0.5)*0.3]}>
-                                <mesh geometry={TENTACLE_GEO} position={[0, -0.3, 0]} rotation={[Math.sin(i)*0.2, 0, Math.cos(i)*0.1]}>
-                                    <meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={4.0} toneMapped={false} />
-                                </mesh>
-                            </group>
-                        ))}
-                    </group>
-                )}
-
-                {data.type === ObjectType.VACCINE && vaccineMaterial && (
-                    <group scale={[1.4, 1.4, 1.4]} rotation={[0, 0, Math.PI / 6]}>
-                        <mesh geometry={VACCINE_BODY_GEO} material={vaccineMaterial.glass} />
-                        <mesh geometry={VACCINE_LIQUID_GEO} material={vaccineMaterial.liquid} />
-                        <mesh position={[0, 0.45, 0]} geometry={VACCINE_CAP_GEO} material={vaccineMaterial.metal} />
-                        <mesh position={[0, 0.75, 0]} geometry={VACCINE_NEEDLE_GEO} material={vaccineMaterial.needle} />
-                        <mesh position={[0, -0.35, 0]} geometry={VACCINE_PLUNGER_GEO} material={vaccineMaterial.metal} />
-                        <mesh position={[0, -0.6, 0]} geometry={VACCINE_ROD_GEO} material={vaccineMaterial.metal} />
-                        <mesh position={[0, -0.82, 0]} geometry={VACCINE_HANDLE_GEO} material={vaccineMaterial.metal} />
-                    </group>
-                )}
-            </group>
+            {data.type === ObjectType.OBSTACLE && (
+                <group>
+                    <mesh position={[0, -0.35, 0]} geometry={HURDLE_BASE_GEO}>
+                        <meshStandardMaterial color="#334155" />
+                    </mesh>
+                    <mesh position={[0, 0.2, 0]} geometry={HURDLE_TOP_BAR_GEO}>
+                        <meshStandardMaterial color={data.color} />
+                    </mesh>
+                    <mesh position={[1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
+                        <meshStandardMaterial color="#64748b" />
+                    </mesh>
+                    <mesh position={[-1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
+                        <meshStandardMaterial color="#64748b" />
+                    </mesh>
+                    <group ref={iconRef}><mesh geometry={ICON_GEO}><meshBasicMaterial color={data.color} /></mesh></group>
+                </group>
+            )}
+            {data.type === ObjectType.HIGH_BARRIER && (
+                <group>
+                    <mesh position={[0, 0, 0]} geometry={GATE_TOP_HOUSING_GEO}>
+                        <meshStandardMaterial color="#334155" />
+                    </mesh>
+                    <mesh position={[0, -0.35, 0]} geometry={GATE_EMITTER_GEO} rotation={[Math.PI, 0, 0]}>
+                        <meshStandardMaterial color={data.color} />
+                    </mesh>
+                    <mesh position={[1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
+                        <meshStandardMaterial color="#64748b" />
+                    </mesh>
+                    <mesh position={[-1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
+                        <meshStandardMaterial color="#64748b" />
+                    </mesh>
+                    <group ref={iconRef} rotation={[0, 0, Math.PI]}><mesh geometry={ICON_GEO}><meshBasicMaterial color={data.color} /></mesh></group>
+                </group>
+            )}
+            {data.type === ObjectType.VACCINE && <SyringeFigure color={data.color!} isFinal={data.isFinalVaccine} />}
         </group>
     );
 });

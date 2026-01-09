@@ -4,287 +4,301 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '../../store';
 import { LANE_WIDTH, GameStatus, SLIDE_DURATION } from '../../types';
 import { audio } from '../System/Audio';
 
-// Removed redundant declare global JSX.IntrinsicElements block to avoid Duplicate Index Signature errors.
-// The catch-all definition in App.tsx handles these types globally.
+const GRAVITY = 55;
+const JUMP_FORCE = 18;
+const FAST_FALL_FORCE = -40;
 
-const GRAVITY = 50;
-const JUMP_FORCE = 16; 
+const SHADOW_GEO = new THREE.CircleGeometry(0.8, 32);
 
-const TORSO_GEO = new THREE.CylinderGeometry(0.25, 0.15, 0.6, 4);
-const JETPACK_GEO = new THREE.BoxGeometry(0.3, 0.4, 0.15);
-const GLOW_STRIP_GEO = new THREE.PlaneGeometry(0.05, 0.2);
-const HEAD_GEO = new THREE.BoxGeometry(0.25, 0.3, 0.3);
-const ARM_GEO = new THREE.BoxGeometry(0.12, 0.6, 0.12);
-const JOINT_SPHERE_GEO = new THREE.SphereGeometry(0.07);
-const HIPS_GEO = new THREE.CylinderGeometry(0.16, 0.16, 0.2);
-const LEG_GEO = new THREE.BoxGeometry(0.15, 0.7, 0.15);
-const SHADOW_GEO = new THREE.CircleGeometry(0.5, 32);
+// --- Simplified 3D Geometry Components ---
+const BODY_GEO = new THREE.CapsuleGeometry(0.35, 0.6, 4, 8);
+const HEAD_GEO = new THREE.BoxGeometry(0.45, 0.45, 0.4);
+const LIMB_GEO = new THREE.CapsuleGeometry(0.1, 0.4, 4, 6);
+const BACKPACK_GEO = new THREE.BoxGeometry(0.5, 0.6, 0.25);
+const CAP_BASE_GEO = new THREE.BoxGeometry(0.48, 0.15, 0.48);
+const CAP_BRIM_GEO = new THREE.BoxGeometry(0.4, 0.05, 0.3);
 
 export const Player: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
-  const bodyRef = useRef<THREE.Group>(null);
-  const shadowRef = useRef<THREE.Mesh>(null);
-  
+  const modelRef = useRef<THREE.Group>(null);
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
   const leftLegRef = useRef<THREE.Group>(null);
   const rightLegRef = useRef<THREE.Group>(null);
-  const headRef = useRef<THREE.Group>(null);
+  const shadowRef = useRef<THREE.Mesh>(null);
+  const coreRef = useRef<THREE.Mesh>(null);
 
-  const { status, takeDamage, hasDoubleJump, activateImmortality, isImmortalityActive, laneCount } = useStore();
-  
+  const { status, takeDamage, hasDoubleJump, activateImmortality, isImmortalityActive, laneCount, togglePause, speed } = useStore();
+
   const isJumping = useRef(false);
   const isSliding = useRef(false);
   const slideTimer = useRef(0);
-  
   const velocityY = useRef(0);
-  const jumpsPerformed = useRef(0); 
-  const spinRotation = useRef(0); 
+  const jumpsPerformed = useRef(0);
 
-  // Lane logic
-  const currentLane = useRef(1); // 0, 1, 2 for 3 lanes
+  const currentLane = useRef(1);
   const targetX = useRef(0);
-
-  // Touch State
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const SWIPE_THRESHOLD = 30;
+  const currentX = useRef(0);
 
   const isInvincible = useRef(false);
   const lastDamageTime = useRef(0);
 
-  const { armorMaterial, jointMaterial, glowMaterial, shadowMaterial } = useMemo(() => {
-      const isGold = isImmortalityActive;
-      return {
-          armorMaterial: new THREE.MeshStandardMaterial({ 
-              color: isGold ? '#ffff00' : '#00ffff', roughness: 0.2, metalness: 0.6, emissive: isGold ? '#aa8800' : '#0066cc', emissiveIntensity: 0.6
-          }),
-          jointMaterial: new THREE.MeshStandardMaterial({ color: '#333333', roughness: 0.7, metalness: 0.5 }),
-          glowMaterial: new THREE.MeshBasicMaterial({ color: isGold ? '#ffffff' : '#ccffff' }),
-          shadowMaterial: new THREE.MeshBasicMaterial({ color: '#000000', opacity: 0.3, transparent: true })
-      };
-  }, [isImmortalityActive]); 
+  // Materials
+  const materials = useMemo(() => ({
+    body: new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.5 }), // Slate Technical Parka
+    skin: new THREE.MeshStandardMaterial({ color: '#ffdbac', roughness: 0.8 }),
+    accent: new THREE.MeshStandardMaterial({ color: '#0ea5e9', roughness: 0.3, metalness: 0.2 }), // Cyan Accents
+    core: new THREE.MeshStandardMaterial({ color: '#0ea5e9', emissive: '#0ea5e9', emissiveIntensity: 2 }),
+    black: new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.2 }),
+    shadow: new THREE.MeshBasicMaterial({ color: '#000000', opacity: 0.15, transparent: true })
+  }), []);
 
   useEffect(() => {
-      if (status === GameStatus.PLAYING) {
-          isJumping.current = false;
-          isSliding.current = false;
-          slideTimer.current = 0;
-          jumpsPerformed.current = 0;
-          velocityY.current = 0;
-          spinRotation.current = 0;
-          currentLane.current = 1;
-          targetX.current = 0;
-          
-          if (groupRef.current) {
-              groupRef.current.position.y = 0;
-              groupRef.current.position.x = 0;
-              groupRef.current.userData.isSliding = false;
-          }
-          if (bodyRef.current) bodyRef.current.rotation.x = 0;
-      }
+    if (status === GameStatus.PLAYING) {
+      isJumping.current = false;
+      isSliding.current = false;
+      slideTimer.current = 0;
+      jumpsPerformed.current = 0;
+      velocityY.current = 0;
+      currentLane.current = 1;
+      targetX.current = 0;
+      currentX.current = 0;
+      if (groupRef.current) groupRef.current.position.set(0, 0, 0);
+    }
   }, [status]);
-  
+
   const triggerJump = () => {
-    if (isSliding.current) { isSliding.current = false; slideTimer.current = 0; }
+    if (status !== GameStatus.PLAYING) return;
     const maxJumps = hasDoubleJump ? 2 : 1;
+    
+    // Jump cancels slide
+    if (isSliding.current) {
+      isSliding.current = false;
+      slideTimer.current = 0;
+    }
+
     if (!isJumping.current) {
-        audio.init(); audio.playJump(false);
-        isJumping.current = true; jumpsPerformed.current = 1; velocityY.current = JUMP_FORCE;
+      audio.init(); 
+      audio.playJump(false);
+      isJumping.current = true; 
+      jumpsPerformed.current = 1; 
+      velocityY.current = JUMP_FORCE;
     } else if (jumpsPerformed.current < maxJumps) {
-        audio.playJump(true); jumpsPerformed.current += 1; velocityY.current = JUMP_FORCE; spinRotation.current = 0; 
+      audio.playJump(true); 
+      jumpsPerformed.current += 1; 
+      velocityY.current = JUMP_FORCE;
     }
   };
 
   const triggerSlide = () => {
-      if (isJumping.current) return;
-      if (!isSliding.current) { audio.init(); audio.playSlide(); }
-      isSliding.current = true; slideTimer.current = SLIDE_DURATION;
+    if (status !== GameStatus.PLAYING) return;
+    
+    // Fast Fall: Slam down if in mid-air
+    if (isJumping.current && velocityY.current > FAST_FALL_FORCE) {
+      velocityY.current = FAST_FALL_FORCE;
+    }
+
+    if (!isSliding.current) { 
+      audio.init(); 
+      audio.playSlide(); 
+    }
+    
+    isSliding.current = true; 
+    slideTimer.current = SLIDE_DURATION;
   };
 
   const moveLane = (dir: number) => {
+    if (status !== GameStatus.PLAYING) return;
     const nextLane = THREE.MathUtils.clamp(currentLane.current + dir, 0, laneCount - 1);
     if (nextLane !== currentLane.current) {
-        currentLane.current = nextLane;
-        targetX.current = (nextLane - Math.floor(laneCount / 2)) * LANE_WIDTH;
-        // Optional: play side move sound
+      currentLane.current = nextLane;
+      targetX.current = (nextLane - Math.floor(laneCount / 2)) * LANE_WIDTH;
     }
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (status !== GameStatus.PLAYING) return;
-      switch(e.key) {
-          case 'ArrowUp': case 'w': case ' ': triggerJump(); break;
-          case 'ArrowDown': case 's': triggerSlide(); break;
-          case 'ArrowLeft': case 'a': moveLane(-1); break;
-          case 'ArrowRight': case 'd': moveLane(1); break;
-          case 'Enter': activateImmortality(); break;
+      if (status !== GameStatus.PLAYING) { if (e.key === 'p') togglePause(); return; }
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case ' ': triggerJump(); break;
+        case 'ArrowDown': case 's': triggerSlide(); break;
+        case 'ArrowLeft': case 'a': moveLane(-1); break;
+        case 'ArrowRight': case 'd': moveLane(1); break;
+        case 'Enter': activateImmortality(); break;
+        case 'Escape': case 'p': togglePause(); break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, hasDoubleJump, activateImmortality, laneCount]);
-
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.touches[0].clientX;
-      touchStartY.current = e.touches[0].clientY;
-    };
-    const handleTouchEnd = (e: TouchEvent) => {
-        if (status !== GameStatus.PLAYING) return;
-        const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-        const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-        const absX = Math.abs(deltaX);
-        const absY = Math.abs(deltaY);
-
-        if (Math.max(absX, absY) > SWIPE_THRESHOLD) {
-            if (absX > absY) { // Horizontal
-                if (deltaX > 0) moveLane(1);
-                else moveLane(-1);
-            } else { // Vertical
-                if (deltaY < 0) triggerJump();
-                else triggerSlide();
-            }
-        } else { triggerJump(); }
-    };
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    return () => {
-        window.removeEventListener('touchstart', handleTouchStart);
-        window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [status, hasDoubleJump, activateImmortality, laneCount]);
+  }, [status, hasDoubleJump, activateImmortality]);
 
   useFrame((state, delta) => {
-    if (!groupRef.current) return;
-    if (status !== GameStatus.PLAYING) return;
+    if (!groupRef.current || !modelRef.current) return;
+    if (status === GameStatus.PAUSED || status !== GameStatus.PLAYING) return;
 
+    // Sync state for LevelManager collision detection
     groupRef.current.userData.isSliding = isSliding.current;
 
-    // Lane Lerp
-    groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, targetX.current, delta * 15);
+    // Smoother Lane Movement
+    currentX.current = THREE.MathUtils.lerp(currentX.current, targetX.current, delta * 20);
+    groupRef.current.position.x = currentX.current;
 
-    if (isSliding.current) {
-        slideTimer.current -= delta;
-        if (slideTimer.current <= 0) isSliding.current = false;
-    }
+    const time = state.clock.elapsedTime;
+    const runCycle = time * speed * 0.5;
+    const bob = isJumping.current || isSliding.current ? 0 : Math.abs(Math.sin(runCycle)) * 0.15;
 
-    if (isJumping.current) {
-        groupRef.current.position.y += velocityY.current * delta;
-        velocityY.current -= GRAVITY * delta;
-        if (groupRef.current.position.y <= 0) {
-            groupRef.current.position.y = 0;
-            isJumping.current = false; jumpsPerformed.current = 0; velocityY.current = 0;
-            if (bodyRef.current) bodyRef.current.rotation.x = 0;
-        }
-        if (jumpsPerformed.current === 2 && bodyRef.current) {
-             spinRotation.current -= delta * 15;
-             if (spinRotation.current < -Math.PI * 2) spinRotation.current = -Math.PI * 2;
-             bodyRef.current.rotation.x = spinRotation.current;
-        }
-    }
-
-    if (isSliding.current) {
-        if (bodyRef.current) {
-            bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, -Math.PI / 2.5, delta * 20);
-            bodyRef.current.position.y = THREE.MathUtils.lerp(bodyRef.current.position.y, 0.4, delta * 20);
-        }
+    // Procedural Limb Animation (Swing)
+    const swingAmount = 0.5;
+    if (!isJumping.current && !isSliding.current) {
+        if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(runCycle) * swingAmount;
+        if (rightArmRef.current) rightArmRef.current.rotation.x = -Math.sin(runCycle) * swingAmount;
+        if (leftLegRef.current) leftLegRef.current.rotation.x = -Math.sin(runCycle) * swingAmount;
+        if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(runCycle) * swingAmount;
     } else {
-        if (!isJumping.current) {
-            groupRef.current.rotation.x = 0.05; 
-            if (bodyRef.current) bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, 0, delta * 20);
-        } else if (bodyRef.current && jumpsPerformed.current !== 2) {
-             bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, 0, delta * 20);
-        }
+        // Reset limb rotations during jump/slide
+        [leftArmRef, rightArmRef, leftLegRef, rightLegRef].forEach(ref => {
+          if (ref.current) ref.current.rotation.x = THREE.MathUtils.lerp(ref.current.rotation.x, 0, delta * 10);
+        });
     }
 
-    const time = state.clock.elapsedTime * 25; 
+    // Physics Loop
+    if (isJumping.current) {
+      groupRef.current.position.y += velocityY.current * delta;
+      velocityY.current -= GRAVITY * delta;
+      
+      if (groupRef.current.position.y <= 0) {
+        groupRef.current.position.y = 0;
+        isJumping.current = false; 
+        jumpsPerformed.current = 0; 
+        velocityY.current = 0;
+        // Landing impact visual squash
+        modelRef.current.scale.set(1.4, 0.6, 1.4); 
+      }
+    }
+
+    // Squash & Stretch Visuals
     if (isSliding.current) {
-        if (leftArmRef.current) leftArmRef.current.rotation.x = Math.PI;
-        if (rightArmRef.current) rightArmRef.current.rotation.x = Math.PI;
-        if (leftLegRef.current) leftLegRef.current.rotation.x = 0.2;
-        if (rightLegRef.current) rightLegRef.current.rotation.x = 0.2;
-    } else if (!isJumping.current) {
-        if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(time) * 0.7;
-        if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(time + Math.PI) * 0.7;
-        if (leftLegRef.current) leftLegRef.current.rotation.x = Math.sin(time + Math.PI) * 1.0;
-        if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(time) * 1.0;
-        if (bodyRef.current) bodyRef.current.position.y = 1.1 + Math.abs(Math.sin(time)) * 0.1;
+      slideTimer.current -= delta;
+      // Sliding makes the character wider and flatter
+      modelRef.current.scale.y = THREE.MathUtils.lerp(modelRef.current.scale.y, 0.45, delta * 20);
+      modelRef.current.scale.x = modelRef.current.scale.z = THREE.MathUtils.lerp(modelRef.current.scale.x, 1.5, delta * 20);
+      modelRef.current.position.y = THREE.MathUtils.lerp(modelRef.current.position.y, 0.4, delta * 20);
+      
+      if (slideTimer.current <= 0) {
+        isSliding.current = false;
+      }
+    } else if (isJumping.current) {
+      // Stretching while rising, squashing while falling
+      const targetStretchY = velocityY.current > 0 ? 1.3 : 0.9;
+      const targetStretchXZ = velocityY.current > 0 ? 0.8 : 1.1;
+      modelRef.current.scale.y = THREE.MathUtils.lerp(modelRef.current.scale.y, targetStretchY, delta * 15);
+      modelRef.current.scale.x = modelRef.current.scale.z = THREE.MathUtils.lerp(modelRef.current.scale.x, targetStretchXZ, delta * 15);
+      modelRef.current.position.y = 1.0;
+    } else {
+      // Standard running bounce and normalization
+      modelRef.current.scale.y = THREE.MathUtils.lerp(modelRef.current.scale.y, 1.0, delta * 15);
+      modelRef.current.scale.x = modelRef.current.scale.z = THREE.MathUtils.lerp(modelRef.current.scale.x, 1.0, delta * 15);
+      modelRef.current.position.y = 1.0 + bob;
     }
 
+    // Lean into movement
+    const targetTilt = (currentX.current - targetX.current) * 0.15;
+    modelRef.current.rotation.z = THREE.MathUtils.lerp(modelRef.current.rotation.z, -targetTilt, delta * 10);
+    // Slight forward tilt based on speed
+    modelRef.current.rotation.x = THREE.MathUtils.lerp(modelRef.current.rotation.x, speed * 0.005, delta * 5);
+
+    // Pulse Core
+    if (coreRef.current) {
+        coreRef.current.scale.setScalar(1 + Math.sin(time * 10) * 0.1);
+        (coreRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 2 + Math.sin(time * 10);
+    }
+
+    // Shadow Dynamics
     if (shadowRef.current) {
-        const height = groupRef.current.position.y;
-        let scale = Math.max(0.2, 1 - (height / 2.5) * 0.5); 
-        let opacity = Math.max(0.1, 0.3 - (height / 2.5) * 0.2);
-        if (isSliding.current) { scale *= 1.2; opacity *= 1.2; }
-        shadowRef.current.scale.set(scale, scale, scale);
-        const material = shadowRef.current.material as THREE.MeshBasicMaterial;
-        if (material && !Array.isArray(material)) material.opacity = opacity;
+      const height = groupRef.current.position.y;
+      shadowRef.current.scale.setScalar(Math.max(0.2, 1.2 - height * 0.3));
+      (shadowRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0.01, 0.15 - height * 0.05);
     }
 
-    const showFlicker = isInvincible.current || isImmortalityActive;
-    if (showFlicker) {
-        if (isInvincible.current) {
-             if (Date.now() - lastDamageTime.current > 1500) { isInvincible.current = false; groupRef.current.visible = true; }
-             else groupRef.current.visible = Math.floor(Date.now() / 50) % 2 === 0;
-        } 
-    } else groupRef.current.visible = true;
+    // Invincibility Flickering
+    if (isInvincible.current) {
+        modelRef.current.visible = Math.floor(Date.now() / 40) % 2 === 0;
+        if (Date.now() - lastDamageTime.current > 1500) isInvincible.current = false;
+    } else {
+        modelRef.current.visible = true;
+    }
+
+    // Immortality Visual Indicator
+    if (isImmortalityActive) {
+        const glowColor = Math.sin(time * 30) > 0 ? '#ffffff' : '#0ea5e9';
+        modelRef.current.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+              child.material.emissive?.set(glowColor);
+              child.material.emissiveIntensity = 0.5;
+            }
+        });
+    }
   });
 
   useEffect(() => {
-     const checkHit = (e: any) => {
-        if (isInvincible.current || isImmortalityActive) return;
-        audio.playDamage(); takeDamage();
-        isInvincible.current = true; lastDamageTime.current = Date.now();
-     };
-     window.addEventListener('player-hit', checkHit);
-     return () => window.removeEventListener('player-hit', checkHit);
+    const checkHit = () => {
+      if (isInvincible.current || isImmortalityActive) return;
+      audio.playDamage(); 
+      takeDamage();
+      isInvincible.current = true; 
+      lastDamageTime.current = Date.now();
+    };
+    window.addEventListener('player-hit', checkHit);
+    return () => window.removeEventListener('player-hit', checkHit);
   }, [takeDamage, isImmortalityActive]);
 
   return (
-    <group ref={groupRef} position={[0, 0, 0]}>
-      <group ref={bodyRef} position={[0, 1.1, 0]}> 
-        <mesh castShadow position={[0, 0.2, 0]} geometry={TORSO_GEO} material={armorMaterial} />
-        <mesh position={[0, 0.2, -0.2]} geometry={JETPACK_GEO} material={jointMaterial} />
-        <mesh position={[-0.08, 0.1, -0.28]} geometry={GLOW_STRIP_GEO} material={glowMaterial} />
-        <mesh position={[0.08, 0.1, -0.28]} geometry={GLOW_STRIP_GEO} material={glowMaterial} />
-        <group ref={headRef} position={[0, 0.6, 0]}>
-            <mesh castShadow geometry={HEAD_GEO} material={armorMaterial} />
-        </group>
-        <group position={[0.32, 0.4, 0]}>
-            <group ref={rightArmRef}>
-                <mesh position={[0, -0.25, 0]} castShadow geometry={ARM_GEO} material={armorMaterial} />
-                <mesh position={[0, -0.55, 0]} geometry={JOINT_SPHERE_GEO} material={glowMaterial} />
+    <group ref={groupRef}>
+      {/* 3D Simplified Character Model */}
+      <group ref={modelRef} position={[0, 1, 0]}>
+        {/* Main Body */}
+        <mesh geometry={BODY_GEO} material={materials.body} position={[0, 0.1, 0]} castShadow />
+
+        {/* Head & Cap */}
+        <group position={[0, 0.75, 0]}>
+            <mesh geometry={HEAD_GEO} material={materials.skin} />
+            <group position={[0, 0.2, 0]}>
+                <mesh geometry={CAP_BASE_GEO} material={materials.accent} />
+                <mesh geometry={CAP_BRIM_GEO} material={materials.accent} position={[0, 0, 0.25]} />
             </group>
         </group>
-        <group position={[-0.32, 0.4, 0]}>
-            <group ref={leftArmRef}>
-                 <mesh position={[0, -0.25, 0]} castShadow geometry={ARM_GEO} material={armorMaterial} />
-                 <mesh position={[0, -0.55, 0]} geometry={JOINT_SPHERE_GEO} material={glowMaterial} />
-            </group>
+
+        {/* Backpack */}
+        <group position={[0, 0.1, -0.3]}>
+            <mesh geometry={BACKPACK_GEO} material={materials.black} />
+            <mesh ref={coreRef} geometry={new THREE.SphereGeometry(0.1, 8, 8)} material={materials.core} position={[0, 0, -0.05]} />
         </group>
-        <mesh position={[0, -0.15, 0]} geometry={HIPS_GEO} material={jointMaterial} />
-        <group position={[0.12, -0.25, 0]}>
-            <group ref={rightLegRef}>
-                 <mesh position={[0, -0.35, 0]} castShadow geometry={LEG_GEO} material={armorMaterial} />
-            </group>
+
+        {/* Arms */}
+        <group ref={leftArmRef} position={[-0.45, 0.35, 0]}>
+            <mesh geometry={LIMB_GEO} material={materials.body} position={[0, -0.2, 0]} />
         </group>
-        <group position={[-0.12, -0.25, 0]}>
-            <group ref={leftLegRef}>
-                 <mesh position={[0, -0.35, 0]} castShadow geometry={LEG_GEO} material={armorMaterial} />
-            </group>
+        <group ref={rightArmRef} position={[0.45, 0.35, 0]}>
+            <mesh geometry={LIMB_GEO} material={materials.body} position={[0, -0.2, 0]} />
+        </group>
+
+        {/* Legs */}
+        <group ref={leftLegRef} position={[-0.2, -0.3, 0]}>
+            <mesh geometry={LIMB_GEO} material={materials.black} position={[0, -0.2, 0]} />
+        </group>
+        <group ref={rightLegRef} position={[0.2, -0.3, 0]}>
+            <mesh geometry={LIMB_GEO} material={materials.black} position={[0, -0.2, 0]} />
         </group>
       </group>
-      <mesh ref={shadowRef} position={[0, 0.02, 0]} rotation={[-Math.PI/2, 0, 0]} geometry={SHADOW_GEO} material={shadowMaterial} />
+
+      <mesh ref={shadowRef} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={SHADOW_GEO} material={materials.shadow} />
     </group>
   );
 };

@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -23,6 +24,7 @@ interface GameState {
   // Vaccine Run Logic
   vaccineCount: number;
   showLevelUpPopup: boolean;
+  isMilestonePaused: boolean;
   
   level: number;
   laneCount: number;
@@ -44,6 +46,8 @@ interface GameState {
   // Actions
   startGame: () => void;
   restartGame: () => void;
+  togglePause: () => void;
+  dismissMilestone: () => void;
   takeDamage: () => void;
   addScore: (amount: number) => void;
   collectVaccine: () => void;
@@ -56,9 +60,12 @@ interface GameState {
   resetPersistentStats: () => void;
 }
 
-const MAX_VACCINES = 20;
-const INITIAL_TIME = 60;
+export const MAX_VACCINES = 20; // Win Target remains 20
+export const MILESTONE_VACCINE_COUNT = 15; // Milestone restored to 15
+const INITIAL_TIME = 45; // Reduced to 45s as requested
 const POINTS_PER_VACCINE = 500;
+const SPEED_SCALE_FACTOR_NORMAL = 1.05; 
+const SPEED_SCALE_FACTOR_POST_MILESTONE = 1.03; 
 
 export const useStore = create<GameState>()(
   persist(
@@ -70,6 +77,7 @@ export const useStore = create<GameState>()(
       speed: 0,
       vaccineCount: 0,
       showLevelUpPopup: false,
+      isMilestonePaused: false,
       level: 1,
       laneCount: 3, 
       timeLeft: INITIAL_TIME,
@@ -84,7 +92,6 @@ export const useStore = create<GameState>()(
       
       seenObstacles: [],
 
-      // Stats defaults
       totalScore: 0,
       highestLevelReached: 1,
       totalVaccinesCollected: 0,
@@ -94,45 +101,50 @@ export const useStore = create<GameState>()(
         status: GameStatus.PLAYING, 
         score: 0, 
         lives: 1, 
-        maxLives: 1,
-        speed: RUN_SPEED_BASE,
+        speed: 21.0, 
         vaccineCount: 0,
         showLevelUpPopup: false,
+        isMilestonePaused: false,
         level: 1,
-        laneCount: 3,
         timeLeft: INITIAL_TIME,
         timeBonus: 0,
         startTime: Date.now(),
-        endTime: 0,
         hasDoubleJump: true,
-        hasImmortality: false,
         isImmortalityActive: false,
-        seenObstacles: []
       }),
 
       restartGame: () => set({ 
         status: GameStatus.PLAYING, 
         score: 0, 
         lives: 1, 
-        maxLives: 1,
-        speed: RUN_SPEED_BASE,
+        speed: 21.0,
         vaccineCount: 0,
         showLevelUpPopup: false,
+        isMilestonePaused: false,
         level: 1,
-        laneCount: 3,
         timeLeft: INITIAL_TIME,
         timeBonus: 0,
         startTime: Date.now(),
-        endTime: 0,
         hasDoubleJump: true,
-        hasImmortality: false,
         isImmortalityActive: false,
-        seenObstacles: []
       }),
 
+      togglePause: () => {
+        const { status } = get();
+        if (status === GameStatus.PLAYING) set({ status: GameStatus.PAUSED });
+        else if (status === GameStatus.PAUSED) set({ status: GameStatus.PLAYING });
+      },
+
+      dismissMilestone: () => {
+        set({ showLevelUpPopup: false, isMilestonePaused: true });
+        setTimeout(() => {
+          set({ isMilestonePaused: false });
+        }, 3000);
+      },
+
       takeDamage: () => {
-        const { isImmortalityActive, status } = get();
-        if (isImmortalityActive || status !== GameStatus.PLAYING) return;
+        const { isImmortalityActive, status, isMilestonePaused } = get();
+        if (isImmortalityActive || status !== GameStatus.PLAYING || isMilestonePaused) return;
 
         const endTime = Date.now();
         set({ 
@@ -147,23 +159,17 @@ export const useStore = create<GameState>()(
       addScore: (amount) => set((state) => ({ score: state.score + amount })),
 
       collectVaccine: () => {
-        const { vaccineCount, level, speed, timeLeft, score } = get();
+        const { vaccineCount, level, speed, timeLeft, score, status } = get();
+        if (status !== GameStatus.PLAYING) return;
         
         const nextCount = vaccineCount + 1;
-        let nextSpeed = speed;
-        let nextLevel = level;
+        const currentScale = nextCount > MILESTONE_VACCINE_COUNT ? SPEED_SCALE_FACTOR_POST_MILESTONE : SPEED_SCALE_FACTOR_NORMAL;
+        let nextSpeed = speed * currentScale;
+        let nextLevel = Math.floor(nextCount / 3) + 1;
 
-        if (nextCount > 0 && nextCount % 3 === 0) {
-            nextSpeed = speed * 1.08;
-            nextLevel = level + 1;
-        }
-
-        if (nextCount === 15) {
+        if (nextCount === MILESTONE_VACCINE_COUNT) {
+            nextSpeed = nextSpeed * 1.15; 
             set({ showLevelUpPopup: true });
-            setTimeout(() => {
-                set({ showLevelUpPopup: false });
-            }, 3000);
-            nextSpeed = nextSpeed * 1.10;
         }
 
         const currentAccumulatedScore = score + POINTS_PER_VACCINE;
@@ -191,7 +197,7 @@ export const useStore = create<GameState>()(
 
       tick: (delta) => {
         const state = get();
-        if (state.status !== GameStatus.PLAYING) return;
+        if (state.status !== GameStatus.PLAYING || state.showLevelUpPopup || state.isMilestonePaused) return;
         
         const nextTime = Math.max(0, state.timeLeft - delta);
         if (nextTime <= 0) {

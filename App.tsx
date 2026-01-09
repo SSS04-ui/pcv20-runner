@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -15,10 +16,26 @@ import { HUD } from './components/UI/HUD';
 import { useStore } from './store';
 
 // Fix for missing Three.js JSX types in this environment
+// Augmented both global JSX and React.JSX to ensure compatibility across different TS configurations.
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      [elemName: string]: any;
+      group: any; mesh: any; points: any; bufferGeometry: any; bufferAttribute: any; pointsMaterial: any;
+      planeGeometry: any; meshBasicMaterial: any; shaderMaterial: any; color: any; fog: any;
+      ambientLight: any; directionalLight: any; pointLight: any; instancedMesh: any; boxGeometry: any;
+      meshStandardMaterial: any; cylinderGeometry: any; torusGeometry: any; icosahedronGeometry: any;
+      circleGeometry: any; sphereGeometry: any; capsuleGeometry: any;
+    }
+  }
+  namespace React {
+    namespace JSX {
+      interface IntrinsicElements {
+        group: any; mesh: any; points: any; bufferGeometry: any; bufferAttribute: any; pointsMaterial: any;
+        planeGeometry: any; meshBasicMaterial: any; shaderMaterial: any; color: any; fog: any;
+        ambientLight: any; directionalLight: any; pointLight: any; instancedMesh: any; boxGeometry: any;
+        meshStandardMaterial: any; cylinderGeometry: any; torusGeometry: any; icosahedronGeometry: any;
+        circleGeometry: any; sphereGeometry: any; capsuleGeometry: any;
+      }
     }
   }
 }
