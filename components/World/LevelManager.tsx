@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -59,6 +58,7 @@ const ParticleSystem: React.FC = () => {
     useEffect(() => {
         const handleExplosion = (e: CustomEvent) => {
             const { position, color } = e.detail;
+            if (!position || !color) return;
             let spawned = 0;
             for(let i = 0; i < PARTICLE_COUNT; i++) {
                 const p = particles[i];
@@ -136,11 +136,14 @@ export const LevelManager: React.FC = () => {
   });
 
   useFrame((state, delta) => {
+    // Only update gameplay logic if we are actually playing
     if (status !== GameStatus.PLAYING) return;
 
     if (showLevelUpPopup && !prevShowPopup.current) {
         // Filter out non-vaccine objects when popup shows to clear the track visually
         objectsRef.current = objectsRef.current.filter(o => o.type === ObjectType.VACCINE);
+        // Reset counter when popup appears
+        obstaclesSinceLastVaccine.current = 0;
         setRenderTrigger(t => t + 1);
     }
     prevShowPopup.current = showLevelUpPopup;
@@ -148,9 +151,12 @@ export const LevelManager: React.FC = () => {
     if (showLevelUpPopup) return;
     
     // While milestone pause is active, we push the next spawn timers forward to ensure a 1s delay
+    // and explicitly ensure obstacles come first by distance spacing
     if (isMilestonePaused) {
         nextObstacleDistance.current = totalDistance.current + (speed * 1.0); 
-        nextVaccineDistance.current = totalDistance.current + (speed * 1.5); 
+        // Vaccines are pushed even further back to guarantee the barrier appears first after the 1s delay
+        nextVaccineDistance.current = totalDistance.current + (speed * 3.0); 
+        obstaclesSinceLastVaccine.current = 0; 
     }
 
     const safeDelta = Math.min(delta, 0.05); 
@@ -167,24 +173,26 @@ export const LevelManager: React.FC = () => {
     const currentObjects = objectsRef.current;
     let hasChanges = false;
 
-    // Trigger first obstacle immediately (0.05s from start) and very close (35 units)
-    if (timeLeft <= 44.95 && !firstSpawnDone.current) {
+    // TRIGGER FIRST OBSTACLE IMMEDIATELY (0.01s after start) and at z = -35 units
+    if (timeLeft <= 44.99 && !firstSpawnDone.current) {
         const lane = Math.floor(Math.random() * laneCount);
         currentObjects.push({
             id: 'initial-barrier',
             type: ObjectType.OBSTACLE,
-            position: [getLaneX(lane), 0.4, -35], // Closer so it arrives almost instantly
+            position: [getLaneX(lane), 0.4, -35], // Arrival in ~1.5 seconds
             active: true,
             color: COLOR_JUMP
         });
         firstSpawnDone.current = true;
         obstaclesSinceLastVaccine.current += 1;
-        nextObstacleDistance.current = totalDistance.current + (speed * 0.5); // Next one follows fast
+        nextObstacleDistance.current = totalDistance.current + (speed * 0.5); 
         hasChanges = true;
     }
 
     for (let i = currentObjects.length - 1; i >= 0; i--) {
         const obj = currentObjects[i];
+        if (!obj) continue;
+        
         obj.position[2] += stepDist;
         if (obj.active) {
             const inZ = Math.abs(obj.position[2] - playerPos.z) < 1.0;
@@ -197,7 +205,7 @@ export const LevelManager: React.FC = () => {
                     audio.playLetterCollect();
                     window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: obj.color } }));
                     obj.active = false;
-                } else if (!isMilestonePaused) {
+                } else if (!isMilestonePaused && status === GameStatus.PLAYING) {
                     let hit = false;
                     if (obj.type === ObjectType.OBSTACLE && playerPos.y < 1.2) hit = true; 
                     if (obj.type === ObjectType.HIGH_BARRIER && !isSliding) hit = true; 
@@ -212,7 +220,7 @@ export const LevelManager: React.FC = () => {
         if (obj.position[2] > REMOVE_DISTANCE) { currentObjects.splice(i, 1); hasChanges = true; }
     }
 
-    if (firstSpawnDone.current && totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused) {
+    if (firstSpawnDone.current && totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused && status === GameStatus.PLAYING) {
         const elapsedTime = (Date.now() - startTime) / 1000;
         let targetReactionTime: number;
         let doubleLaneChance = 0.15; 
@@ -262,7 +270,8 @@ export const LevelManager: React.FC = () => {
         hasChanges = true;
     }
 
-    if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused) {
+    if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused && status === GameStatus.PLAYING) {
+        // Strict requirement: vaccines only spawn if at least 2 barriers have appeared since the last one
         let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= 2; 
 
         if (meetsBarrierRequirement && totalSpawnedVaccines.current < 30 && vaccineCount < MAX_VACCINES) {
@@ -299,14 +308,19 @@ export const LevelManager: React.FC = () => {
             }
             hasChanges = true;
         } else if (!meetsBarrierRequirement) {
+            // Delay vaccine spawn check until barrier requirement is met
             nextVaccineDistance.current = totalDistance.current + (speed * 0.3); 
         }
     }
-    if (hasChanges) { objectsRef.current = currentObjects; setRenderTrigger(t => t + 1); }
+    if (hasChanges && status === GameStatus.PLAYING) { 
+        objectsRef.current = currentObjects; 
+        setRenderTrigger(t => t + 1); 
+    }
   });
 
   useEffect(() => {
-    if (status === GameStatus.MENU) {
+    // Reset core spawning trackers on transition to MENU or after GAME_OVER
+    if (status === GameStatus.MENU || status === GameStatus.GAME_OVER) {
         firstSpawnDone.current = false;
         totalDistance.current = 0;
         nextObstacleDistance.current = 9999;
@@ -316,13 +330,19 @@ export const LevelManager: React.FC = () => {
         lastVaccineLane.current = null;
         consecutiveVaccineLaneCount.current = 0;
         totalSpawnedVaccines.current = 0;
+        
+        // Only clear the list physically when going back to MENU
+        if (status === GameStatus.MENU) {
+            objectsRef.current = [];
+            setRenderTrigger(t => t + 1);
+        }
     }
   }, [status]);
 
   return (
     <group>
       <ParticleSystem />
-      {objectsRef.current.map(obj => obj.active && <GameEntity key={obj.id} data={obj} />)}
+      {objectsRef.current.map(obj => obj && obj.active && <GameEntity key={obj.id} data={obj} />)}
     </group>
   );
 };

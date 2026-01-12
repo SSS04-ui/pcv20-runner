@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -22,26 +21,34 @@ const CameraController = () => {
   useFrame((state, delta) => {
     const aspect = size.width / size.height;
     const isMobile = aspect < 1.0; 
+    const isTablet = aspect >= 1.0 && aspect < 1.4;
 
-    // Mobile Optimization: Pull back significantly more and tilt higher
+    // Responsive framing: taller screens need a higher perspective to keep player in view
     const extraLanes = Math.max(0, laneCount - 3);
     
-    // Base height and distance
-    let targetY = isMobile ? 12.0 : 6.0;
-    let targetZ = isMobile ? 16.0 : 9.0;
+    // Adjusted camera height and distance for better framing on all devices
+    // Significantly increased pull-back (targetZ) and height (targetY) for mobile
+    let targetY = isMobile ? 38.0 : (isTablet ? 26.0 : 18.0);
+    let targetZ = isMobile ? 52.0 : (isTablet ? 38.0 : 28.0);
 
-    // Adjust for more lanes if needed
-    targetY += extraLanes * (isMobile ? 3.0 : 0.5);
-    targetZ += extraLanes * (isMobile ? 6.0 : 1.0);
+    // Extreme dynamic adjustment for ultra-tall phone screens (e.g. 21:9)
+    if (isMobile && aspect < 0.5) {
+      targetY += 20.0;
+      targetZ += 25.0;
+    }
+
+    targetY += extraLanes * (isMobile ? 5.5 : 2.5);
+    targetZ += extraLanes * (isMobile ? 11.0 : 4.0);
 
     const targetPos = new THREE.Vector3(0, targetY, targetZ);
     
     // Smoothly interpolate camera position
-    camera.position.lerp(targetPos, delta * 3.0);
+    camera.position.lerp(targetPos, delta * 3.5);
     
-    // Look ahead to center the action. On mobile, we look lower to push the player higher in the screen
-    const lookAtY = isMobile ? -2.0 : 0;
-    camera.lookAt(0, lookAtY, -30); 
+    // Aim lower on mobile to shift the horizon down and push the player higher on screen
+    // This ensures they are not cut off by the bottom edge or obscured by UI
+    const lookAtY = isMobile ? -24.0 : -12.0;
+    camera.lookAt(0, lookAtY, -35); 
   });
   
   return null;
