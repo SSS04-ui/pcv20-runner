@@ -60,9 +60,9 @@ interface GameState {
   resetPersistentStats: () => void;
 }
 
-export const MAX_VACCINES = 20; // Win Target remains 20
-export const MILESTONE_VACCINE_COUNT = 15; // Milestone restored to 15
-const INITIAL_TIME = 45; // Reduced to 45s as requested
+export const MAX_VACCINES = 20; 
+export const MILESTONE_VACCINE_COUNT = 15; 
+const INITIAL_TIME = 45; 
 const POINTS_PER_VACCINE = 500;
 const SPEED_SCALE_FACTOR_NORMAL = 1.05; 
 const SPEED_SCALE_FACTOR_POST_MILESTONE = 1.03; 
@@ -139,12 +139,12 @@ export const useStore = create<GameState>()(
         set({ showLevelUpPopup: false, isMilestonePaused: true });
         setTimeout(() => {
           set({ isMilestonePaused: false });
-        }, 3000);
+        }, 1000); // Wait 1s before resuming spawns
       },
 
       takeDamage: () => {
-        const { isImmortalityActive, status, isMilestonePaused } = get();
-        if (isImmortalityActive || status !== GameStatus.PLAYING || isMilestonePaused) return;
+        const { isImmortalityActive, status, isMilestonePaused, showLevelUpPopup } = get();
+        if (isImmortalityActive || status !== GameStatus.PLAYING || isMilestonePaused || showLevelUpPopup) return;
 
         const endTime = Date.now();
         set({ 

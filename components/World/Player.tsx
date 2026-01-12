@@ -35,7 +35,7 @@ export const Player: React.FC = () => {
   const shadowRef = useRef<THREE.Mesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
 
-  const { status, takeDamage, hasDoubleJump, activateImmortality, isImmortalityActive, laneCount, togglePause, speed } = useStore();
+  const { status, takeDamage, hasDoubleJump, activateImmortality, isImmortalityActive, laneCount, togglePause, speed, showLevelUpPopup } = useStore();
 
   const isJumping = useRef(false);
   const isSliding = useRef(false);
@@ -78,7 +78,7 @@ export const Player: React.FC = () => {
   }, [status]);
 
   const triggerJump = () => {
-    if (status !== GameStatus.PLAYING) return;
+    if (status !== GameStatus.PLAYING || showLevelUpPopup) return;
     const maxJumps = hasDoubleJump ? 2 : 1;
     
     if (isSliding.current) {
@@ -100,7 +100,7 @@ export const Player: React.FC = () => {
   };
 
   const triggerSlide = () => {
-    if (status !== GameStatus.PLAYING) return;
+    if (status !== GameStatus.PLAYING || showLevelUpPopup) return;
     
     if (isJumping.current && velocityY.current > FAST_FALL_FORCE) {
       velocityY.current = FAST_FALL_FORCE;
@@ -116,7 +116,7 @@ export const Player: React.FC = () => {
   };
 
   const moveLane = (dir: number) => {
-    if (status !== GameStatus.PLAYING) return;
+    if (status !== GameStatus.PLAYING || showLevelUpPopup) return;
     const nextLane = THREE.MathUtils.clamp(currentLane.current + dir, 0, laneCount - 1);
     if (nextLane !== currentLane.current) {
       currentLane.current = nextLane;
@@ -127,6 +127,7 @@ export const Player: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (status !== GameStatus.PLAYING) { if (e.key === 'p') togglePause(); return; }
+      if (showLevelUpPopup) return;
       switch (e.key) {
         case 'ArrowUp': case 'w': case ' ': triggerJump(); break;
         case 'ArrowDown': case 's': triggerSlide(); break;
@@ -142,7 +143,7 @@ export const Player: React.FC = () => {
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
-      if (status !== GameStatus.PLAYING) return;
+      if (status !== GameStatus.PLAYING || showLevelUpPopup) return;
       
       const touchEnd = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
       const deltaX = touchEnd.x - touchStart.current.x;
@@ -174,11 +175,11 @@ export const Player: React.FC = () => {
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [status, hasDoubleJump, activateImmortality, laneCount]);
+  }, [status, hasDoubleJump, activateImmortality, laneCount, showLevelUpPopup]);
 
   useFrame((state, delta) => {
     if (!groupRef.current || !modelRef.current) return;
-    if (status === GameStatus.PAUSED || status !== GameStatus.PLAYING) return;
+    if (status === GameStatus.PAUSED || status !== GameStatus.PLAYING || showLevelUpPopup) return;
 
     groupRef.current.userData.isSliding = isSliding.current;
 
@@ -270,7 +271,7 @@ export const Player: React.FC = () => {
 
   useEffect(() => {
     const checkHit = () => {
-      if (isInvincible.current || isImmortalityActive) return;
+      if (isInvincible.current || isImmortalityActive || showLevelUpPopup) return;
       audio.playDamage(); 
       takeDamage();
       isInvincible.current = true; 
@@ -278,7 +279,7 @@ export const Player: React.FC = () => {
     };
     window.addEventListener('player-hit', checkHit);
     return () => window.removeEventListener('player-hit', checkHit);
-  }, [takeDamage, isImmortalityActive]);
+  }, [takeDamage, isImmortalityActive, showLevelUpPopup]);
 
   return (
     <group ref={groupRef}>

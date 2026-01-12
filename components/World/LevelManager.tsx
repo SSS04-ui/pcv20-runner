@@ -106,7 +106,7 @@ const ParticleSystem: React.FC = () => {
 };
 
 export const LevelManager: React.FC = () => {
-  const { status, speed, collectVaccine, level, tick, laneCount, vaccineCount, showLevelUpPopup, isMilestonePaused, startTime } = useStore();
+  const { status, speed, collectVaccine, level, tick, laneCount, vaccineCount, showLevelUpPopup, isMilestonePaused, startTime, timeLeft } = useStore();
   const objectsRef = useRef<GameObject[]>([]);
   const [, setRenderTrigger] = useState(0);
   const playerObjRef = useRef<THREE.Object3D | null>(null);
@@ -116,7 +116,6 @@ export const LevelManager: React.FC = () => {
   const nextVaccineDistance = useRef(21); 
 
   const firstSpawnDone = useRef(false);
-  const prevMilestonePaused = useRef(false);
   const prevShowPopup = useRef(false);
 
   const obstaclesSinceLastVaccine = useRef(0);
@@ -140,6 +139,7 @@ export const LevelManager: React.FC = () => {
     if (status !== GameStatus.PLAYING) return;
 
     if (showLevelUpPopup && !prevShowPopup.current) {
+        // Filter out non-vaccine objects when popup shows to clear the track visually
         objectsRef.current = objectsRef.current.filter(o => o.type === ObjectType.VACCINE);
         setRenderTrigger(t => t + 1);
     }
@@ -147,6 +147,12 @@ export const LevelManager: React.FC = () => {
 
     if (showLevelUpPopup) return;
     
+    // While milestone pause is active, we push the next spawn timers forward to ensure a 1s delay
+    if (isMilestonePaused) {
+        nextObstacleDistance.current = totalDistance.current + (speed * 1.0); 
+        nextVaccineDistance.current = totalDistance.current + (speed * 1.5); 
+    }
+
     const safeDelta = Math.min(delta, 0.05); 
     const stepDist = speed * safeDelta;
     totalDistance.current += stepDist;
@@ -161,36 +167,21 @@ export const LevelManager: React.FC = () => {
     const currentObjects = objectsRef.current;
     let hasChanges = false;
 
-    if (totalDistance.current < 1 && !firstSpawnDone.current) {
+    // Trigger first obstacle immediately (0.05s from start) and very close (35 units)
+    if (timeLeft <= 44.95 && !firstSpawnDone.current) {
         const lane = Math.floor(Math.random() * laneCount);
         currentObjects.push({
             id: 'initial-barrier',
             type: ObjectType.OBSTACLE,
-            position: [getLaneX(lane), 0.4, -21], 
+            position: [getLaneX(lane), 0.4, -35], // Closer so it arrives almost instantly
             active: true,
             color: COLOR_JUMP
         });
         firstSpawnDone.current = true;
         obstaclesSinceLastVaccine.current += 1;
-        nextObstacleDistance.current = 21 + (speed * (1.0 / 1.3)); 
+        nextObstacleDistance.current = totalDistance.current + (speed * 0.5); // Next one follows fast
         hasChanges = true;
     }
-
-    if (prevMilestonePaused.current === true && isMilestonePaused === false) {
-        const lane = Math.floor(Math.random() * laneCount);
-        const type = Math.random() > 0.5 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
-        currentObjects.push({
-            id: uuidv4(),
-            type,
-            position: [getLaneX(lane), type === ObjectType.HIGH_BARRIER ? 2.5 : 0.4, -speed],
-            active: true,
-            color: type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP
-        });
-        obstaclesSinceLastVaccine.current += 1;
-        nextObstacleDistance.current = totalDistance.current + (speed * 1.2); 
-        hasChanges = true;
-    }
-    prevMilestonePaused.current = isMilestonePaused;
 
     for (let i = currentObjects.length - 1; i >= 0; i--) {
         const obj = currentObjects[i];
@@ -221,7 +212,7 @@ export const LevelManager: React.FC = () => {
         if (obj.position[2] > REMOVE_DISTANCE) { currentObjects.splice(i, 1); hasChanges = true; }
     }
 
-    if (totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused) {
+    if (firstSpawnDone.current && totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused) {
         const elapsedTime = (Date.now() - startTime) / 1000;
         let targetReactionTime: number;
         let doubleLaneChance = 0.15; 
@@ -320,7 +311,6 @@ export const LevelManager: React.FC = () => {
         totalDistance.current = 0;
         nextObstacleDistance.current = 9999;
         nextVaccineDistance.current = 21;
-        prevMilestonePaused.current = false;
         prevShowPopup.current = false;
         obstaclesSinceLastVaccine.current = 0;
         lastVaccineLane.current = null;
