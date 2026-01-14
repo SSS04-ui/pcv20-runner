@@ -26,6 +26,48 @@ const Color = 'color' as any;
 const Fog = 'fog' as any;
 
 const CITY_BUILDING_COUNT = 120; 
+const NORMAL_SPEED_LINE_COUNT = 40;
+const ULTIMATE_SPEED_LINE_COUNT = 100;
+
+const SpeedLines: React.FC = () => {
+  const { speed, status, vaccineCount } = useStore();
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const isUltimate = vaccineCount >= MILESTONE_VACCINE_COUNT;
+  const count = isUltimate ? ULTIMATE_SPEED_LINE_COUNT : NORMAL_SPEED_LINE_COUNT;
+
+  const lines = useMemo(() => {
+    return new Array(ULTIMATE_SPEED_LINE_COUNT).fill(0).map(() => ({
+      x: (Math.random() - 0.5) * 80,
+      y: Math.random() * 30 + 2,
+      z: Math.random() * -600,
+      len: 15 + Math.random() * 30
+    }));
+  }, []);
+
+  useFrame((state, delta) => {
+    if (!meshRef.current || status === GameStatus.PAUSED) return;
+    
+    for (let i = 0; i < count; i++) {
+      const l = lines[i];
+      l.z += (isUltimate ? speed * 3 : speed * 1.5) * delta;
+      if (l.z > 50) l.z = -600;
+      
+      dummy.position.set(l.x, l.y, l.z);
+      dummy.scale.set(0.08, 0.08, l.len);
+      dummy.updateMatrix();
+      meshRef.current!.setMatrixAt(i, dummy.matrix);
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <InstancedMesh ref={meshRef} args={[undefined, undefined, ULTIMATE_SPEED_LINE_COUNT]}>
+      <BoxGeometry args={[1, 1, 1]} />
+      <MeshBasicMaterial color="#ffffff" transparent opacity={isUltimate ? 0.6 : 0.3} />
+    </InstancedMesh>
+  );
+};
 
 const CityBackground: React.FC = () => {
   const { speed, status } = useStore();
@@ -83,11 +125,8 @@ const CityBackground: React.FC = () => {
 };
 
 const Track: React.FC = () => {
-    const { laneCount, speed, status, vaccineCount } = useStore();
-    const markersRef = useRef<THREE.Group>(null);
-    const offsetRef = useRef(0);
+    const { laneCount, vaccineCount } = useStore();
     const isUltimateStage = vaccineCount >= MILESTONE_VACCINE_COUNT;
-
     const trackWidth = laneCount * LANE_WIDTH;
 
     const laneTiles = useMemo(() => {
@@ -102,28 +141,20 @@ const Track: React.FC = () => {
         return tiles;
     }, [laneCount, trackWidth]);
 
-    useFrame((state, delta) => {
-        if (markersRef.current && status !== GameStatus.PAUSED) {
-            const activeSpeed = (status === GameStatus.PLAYING) ? speed : 0;
-            offsetRef.current += activeSpeed * delta;
-            markersRef.current.position.z = (offsetRef.current % 12);
-        }
-    });
-
     return (
         <Group position={[0, 0, 0]}>
             <Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.15, -50]}>
                 <PlaneGeometry args={[trackWidth + 15, 1000]} />
-                <MeshStandardMaterial color={isUltimateStage ? "#0c0a2d" : "#cbd5e1"} />
+                <MeshStandardMaterial color={isUltimateStage ? "#060814" : "#cbd5e1"} />
             </Mesh>
 
             {laneTiles.map((tile) => (
                 <Mesh key={tile.id} position={[tile.x, -0.08, -50]} rotation={[-Math.PI / 2, 0, 0]}>
                     <PlaneGeometry args={[LANE_WIDTH - 0.6, 1000]} />
                     <MeshStandardMaterial 
-                        color={isUltimateStage ? (tile.id % 2 === 0 ? "#080b14" : "#020617") : (tile.id % 2 === 0 ? "#f8fafc" : "#ffffff")} 
-                        roughness={0.2} 
-                        metalness={0.1}
+                        color={isUltimateStage ? (tile.id % 2 === 0 ? "#02040a" : "#000000") : (tile.id % 2 === 0 ? "#f8fafc" : "#ffffff")} 
+                        roughness={0.1} 
+                        metalness={0.2}
                     />
                 </Mesh>
             ))}
@@ -134,38 +165,22 @@ const Track: React.FC = () => {
                     <Mesh key={`sep-${i}`} position={[x, 0.04, -50]} rotation={[-Math.PI / 2, 0, 0]}>
                         <PlaneGeometry args={[0.6, 1000]} />
                         <MeshStandardMaterial 
-                            color={isUltimateStage ? "#ef4444" : "#0ea5e9"} 
-                            emissive={isUltimateStage ? "#ef4444" : "#0ea5e9"}
-                            emissiveIntensity={isUltimateStage ? 4.0 : 0.8}
+                            color={isUltimateStage ? "#ff1111" : "#0ea5e9"} 
+                            emissive={isUltimateStage ? "#ff1111" : "#0ea5e9"}
+                            emissiveIntensity={isUltimateStage ? 10.0 : 0.8}
                             roughness={0.1} 
                         />
                     </Mesh>
                 );
             })}
 
-            <Group ref={markersRef}>
-                {Array.from({ length: 40 }).map((_, zi) => (
-                    <Group key={`row-${zi}`} position={[0, 0.08, -zi * 16]}>
-                        {Array.from({ length: laneCount }).map((_, li) => {
-                            const x = -(trackWidth / 2) + (li * LANE_WIDTH) + (LANE_WIDTH / 2);
-                            return (
-                                <Mesh key={`mark-${li}`} position={[x, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                                    <PlaneGeometry args={[0.8, 5.0]} />
-                                    <MeshBasicMaterial color={isUltimateStage ? "#f87171" : "#0ea5e9"} transparent opacity={isUltimateStage ? 0.8 : 0.6} />
-                                </Mesh>
-                            );
-                        })}
-                    </Group>
-                ))}
-            </Group>
-
             <Mesh position={[(trackWidth / 2) + 1.2, 0.5, -50]}>
                 <BoxGeometry args={[1.2, 1.0, 1000]} />
-                <MeshStandardMaterial color={isUltimateStage ? "#ef4444" : "#475569"} />
+                <MeshStandardMaterial color={isUltimateStage ? "#440000" : "#475569"} />
             </Mesh>
             <Mesh position={[-(trackWidth / 2) - 1.2, 0.5, -50]}>
                 <BoxGeometry args={[1.2, 1.0, 1000]} />
-                <MeshStandardMaterial color={isUltimateStage ? "#ef4444" : "#475569"} />
+                <MeshStandardMaterial color={isUltimateStage ? "#440000" : "#475569"} />
             </Mesh>
         </Group>
     );
@@ -183,12 +198,12 @@ export const Environment: React.FC = () => {
   let fogFar = 600;
   
   if (isUltimateStage) {
-      bgColor = '#020617';
-      fogColor = '#2b0707'; 
-      ambientIntensity = 1.0;
-      lightColor = '#fecaca'; 
-      fogNear = 75; // Pushed out from 65 for better visibility at 80% pass rate
-      fogFar = 250; // Maintained for smooth falloff
+      bgColor = '#000005';
+      fogColor = '#100000'; 
+      ambientIntensity = 0.8;
+      lightColor = '#ffcccc'; 
+      fogNear = 50; 
+      fogFar = 200; 
   }
 
   return (
@@ -199,19 +214,20 @@ export const Environment: React.FC = () => {
       <AmbientLight intensity={ambientIntensity} color={lightColor} />
       <DirectionalLight 
         position={[150, 250, 150]} 
-        intensity={isUltimateStage ? 3.5 : 2.5} 
+        intensity={isUltimateStage ? 4.0 : 2.5} 
         color={lightColor}
         castShadow
       />
-      <PointLight position={[0, 150, -300]} intensity={isUltimateStage ? 8.0 : 2.0} color={isUltimateStage ? "#ff3333" : "#0ea5e9"} />
+      <PointLight position={[0, 150, -300]} intensity={isUltimateStage ? 12.0 : 2.0} color={isUltimateStage ? "#ff0000" : "#0ea5e9"} />
       
       <CityBackground />
       <Track />
+      <SpeedLines />
       
       <Group position={[0, 0, -600]}>
           <Mesh rotation={[Math.PI / 2, 0, 0]}>
               <TorusGeometry args={[300, 2.0, 16, 100]} />
-              <MeshBasicMaterial color={isUltimateStage ? "#ef4444" : "#0ea5e9"} transparent opacity={isUltimateStage ? 0.7 : 0.25} />
+              <MeshBasicMaterial color={isUltimateStage ? "#ff0000" : "#0ea5e9"} transparent opacity={isUltimateStage ? 0.9 : 0.25} />
           </Mesh>
       </Group>
     </>

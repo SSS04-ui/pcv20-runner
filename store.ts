@@ -66,7 +66,7 @@ export const MILESTONE_VACCINE_COUNT = 15;
 const INITIAL_TIME = 50; 
 const POINTS_PER_VACCINE = 500;
 const SPEED_SCALE_FACTOR_NORMAL = 1.05; 
-const SPEED_SCALE_FACTOR_POST_MILESTONE = 1.035; // Tuned down from 1.04 to balance the 13% spike
+const SPEED_SCALE_FACTOR_POST_MILESTONE = 1.03; // Tuned for 80% pass rate
 
 export const useStore = create<GameState>()(
   persist(
@@ -190,7 +190,7 @@ export const useStore = create<GameState>()(
         let nextLevel = Math.floor(nextCount / 3) + 1;
 
         if (nextCount === MILESTONE_VACCINE_COUNT) {
-            nextSpeed = nextSpeed * 1.13; // Reduced spike from 18% to 13% as requested
+            nextSpeed = nextSpeed * 1.13; // Fixed 13% spike
             set({ showLevelUpPopup: true });
         }
 

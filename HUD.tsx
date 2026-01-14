@@ -258,13 +258,13 @@ export const HUD: React.FC = () => {
         <div className="flex flex-col w-full space-y-6 md:space-y-10">
             <div className="flex justify-between items-start w-full">
                 {/* Score Left */}
-                <div className={`text-4xl md:text-7xl font-black tracking-tighter transition-colors drop-shadow-md ${isUltimateStage ? 'text-red-500' : 'text-slate-900'}`}>
+                <div className={`text-4xl md:text-7xl font-black tracking-tighter transition-colors drop-shadow-md font-cyber ${isUltimateStage ? 'text-red-500 glitch-text' : 'text-slate-900'}`}>
                     {score.toLocaleString()}
                 </div>
                 
                 {/* Timer and Pause Right */}
                 <div className="flex items-center space-x-4 md:space-x-6 pointer-events-auto">
-                    <div className={`text-3xl md:text-6xl font-black transition-colors drop-shadow-md ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                    <div className={`text-3xl md:text-6xl font-black transition-colors drop-shadow-md font-cyber ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                         {timeLeft.toFixed(1)}<span className={`text-sm md:text-2xl ml-2 font-bold uppercase ${timeLeft < 10 ? 'text-red-400' : 'text-white/70'}`}>Sec</span>
                     </div>
                     <button 
@@ -286,20 +286,25 @@ export const HUD: React.FC = () => {
                     <div className={`h-full rounded-full transition-all duration-1000 ease-out ${isUltimateStage ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-cyan-500 shadow-[0_0_15px_rgba(8,165,233,0.6)]'}`} style={{ width: `${progressPercent}%` }} />
                 </div>
                 <div className="flex justify-between w-full max-w-xl mt-3 px-2">
-                    <span className="text-[9px] md:text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] drop-shadow-sm">疫苗進度協作</span>
-                    <span className={`text-[10px] md:text-[13px] font-black tracking-wider drop-shadow-sm ${isUltimateStage ? 'text-red-600' : 'text-cyan-600'}`}>{vaccineCount} / {MAX_VACCINES} 價收集完成</span>
+                    <div className="flex items-center space-x-3">
+                        <span className="text-[9px] md:text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] drop-shadow-sm">疫苗進度協作</span>
+                        {isUltimateStage && (
+                            <span className="text-[8px] md:text-[10px] bg-red-600 text-white font-black px-2 py-0.5 rounded glitch-text uppercase tracking-widest">Ultimate Protection Mode</span>
+                        )}
+                    </div>
+                    <span className={`text-[10px] md:text-[13px] font-black tracking-wider drop-shadow-sm font-cyber ${isUltimateStage ? 'text-red-600' : 'text-cyan-600'}`}>{vaccineCount} / {MAX_VACCINES} 價收集完成</span>
                 </div>
             </div>
         </div>
 
         {/* Bottom Bar Stats */}
         <div className="w-full flex justify-between items-end pb-safe">
-             <div className={`bg-white/95 border-2 border-slate-100 px-5 py-3 md:px-8 md:py-4 rounded-[1.5rem] md:rounded-[2rem] text-sm md:text-2xl font-black ${isUltimateStage ? 'text-red-600' : 'text-slate-900'} shadow-2xl backdrop-blur-sm tracking-widest`}>
+             <div className={`bg-white/95 border-2 border-slate-100 px-5 py-3 md:px-8 md:py-4 rounded-[1.5rem] md:rounded-[2rem] text-sm md:text-2xl font-black font-cyber ${isUltimateStage ? 'text-red-600' : 'text-slate-900'} shadow-2xl backdrop-blur-sm tracking-widest`}>
                 LEVEL {level}
              </div>
              <div className="flex space-x-3 md:space-x-4">
                  <div className="bg-white/95 border-2 border-slate-100 p-3 md:p-5 rounded-[1.5rem] md:rounded-[2rem] shadow-2xl backdrop-blur-sm">
-                    <Zap className={`w-5 h-5 md:w-8 md:h-8 ${isUltimateStage ? 'text-red-500' : 'text-cyan-500'}`} />
+                    <Zap className={`w-5 h-5 md:w-8 md:h-8 ${isUltimateStage ? 'text-red-500 animate-pulse' : 'text-cyan-500'}`} />
                  </div>
                  <div className="bg-white/95 border-2 border-slate-100 p-3 md:p-5 rounded-[1.5rem] md:rounded-[2rem] shadow-2xl backdrop-blur-sm">
                     <ShieldCheck className={`w-5 h-5 md:w-8 md:h-8 ${isUltimateStage ? 'text-orange-500' : 'text-slate-400'}`} />

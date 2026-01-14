@@ -58,10 +58,11 @@ const SHADOW_GEO = new THREE.CircleGeometry(1.2, 32);
 const VACCINE_GLOW_FLOOR_GEO = new THREE.CircleGeometry(1.5, 32);
 const PARTICLE_COUNT = 300;
 
-const COLOR_JUMP = '#10b981'; 
-const COLOR_SLIDE = '#f43f5e'; 
+const COLOR_JUMP = '#10b981'; // Neon Green
+const COLOR_SLIDE = '#f43f5e'; // Neon Red
 const COLOR_VACCINE = '#0ea5e9'; 
 const COLOR_GOLD = '#fbbf24';
+const COLOR_ULTIMATE_OBSTACLE = '#ffffff'; // Blinding White for Ultimate Stage hurdle frame
 
 const ParticleSystem: React.FC = () => {
     const mesh = useRef<THREE.InstancedMesh>(null);
@@ -234,11 +235,9 @@ export const LevelManager: React.FC = () => {
         let doubleLaneChance: number;
 
         if (isUltimate) {
-            // ULTIMATE STAGE DIFFICULTY (16-20 vaccines) - Calibration for 80% passing rate
-            targetReactionTime = 0.64; // Further widened from 0.62 to 0.64 for 80% pass rate target
-            doubleLaneChance = 0.20;   // Reduced from 0.25 to 0.20 to make patterns more navigable at high speeds
+            targetReactionTime = 0.66; 
+            doubleLaneChance = 0.20;   
         } else {
-            // NORMAL PROGRESSION (1-15 vaccines)
             if (elapsedTime < 2) {
                 targetReactionTime = 0.8;
                 doubleLaneChance = 0.1;
@@ -256,13 +255,16 @@ export const LevelManager: React.FC = () => {
         const isDoubleLane = Math.random() < doubleLaneChance; 
         nextObstacleDistance.current = totalDistance.current + (speed * targetReactionTime);
         
+        // Colors for gameplay clarity: Jump=Green, Slide=Red
+        const obstacleColor = type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP;
+
         if (isDoubleLane) {
             const laneA = Math.floor(Math.random() * laneCount);
             let laneB = (laneA + 1) % laneCount;
             [laneA, laneB].forEach(l => {
                 currentObjects.push({
                     id: uuidv4(), type, position: [getLaneX(l), type === ObjectType.HIGH_BARRIER ? 2.5 : 0.4, -SPAWN_DISTANCE],
-                    active: true, color: type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP
+                    active: true, color: obstacleColor
                 });
             });
             obstaclesSinceLastVaccine.current += 1;
@@ -270,7 +272,7 @@ export const LevelManager: React.FC = () => {
             const lane = Math.floor(Math.random() * laneCount);
             currentObjects.push({
                 id: uuidv4(), type, position: [getLaneX(lane), type === ObjectType.HIGH_BARRIER ? 2.5 : 0.4, -SPAWN_DISTANCE],
-                active: true, color: type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP
+                active: true, color: obstacleColor
             });
             obstaclesSinceLastVaccine.current += 1;
         }
@@ -278,7 +280,10 @@ export const LevelManager: React.FC = () => {
     }
 
     if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused && status === GameStatus.PLAYING) {
-        let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= 2; 
+        const isPostMilestone = vaccineCount >= MILESTONE_VACCINE_COUNT;
+        // Strictly require 5 barriers after the 15th vaccine milestone
+        let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= (isPostMilestone ? 5 : 2); 
+        
         if (meetsBarrierRequirement && totalSpawnedVaccines.current < 50 && vaccineCount < MAX_VACCINES) {
             let lane = Math.floor(Math.random() * laneCount);
             const vaccineSpawnGap = (speed * (1.2 + Math.random() * 0.8));
@@ -290,8 +295,8 @@ export const LevelManager: React.FC = () => {
                 type: ObjectType.VACCINE, 
                 position: [getLaneX(lane), 1.5, -SPAWN_DISTANCE - 10],
                 active: true, 
-                color: isFinal ? COLOR_GOLD : COLOR_VACCINE,
-                isFinalVaccine: isFinal
+                color: (isFinal || isPostMilestone) ? COLOR_GOLD : COLOR_VACCINE,
+                isFinalVaccine: isFinal || isPostMilestone
             });
             totalSpawnedVaccines.current++;
             hasChanges = true;
@@ -385,13 +390,19 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
     const iconRef = useRef<THREE.Group>(null);
     const warningRef = useRef<THREE.Mesh>(null);
     const floorGlowRef = useRef<THREE.Mesh>(null);
+    const topBarRef = useRef<THREE.Mesh>(null);
+    const emitterRef = useRef<THREE.Mesh>(null);
+    const baseRef = useRef<THREE.Mesh>(null);
+    const postALeftRef = useRef<THREE.Mesh>(null);
+    const postARightRef = useRef<THREE.Mesh>(null);
 
     useFrame((state) => {
-        const { status, showLevelUpPopup } = useStore.getState();
+        const { status, showLevelUpPopup, vaccineCount } = useStore.getState();
         if (status === GameStatus.PAUSED || showLevelUpPopup) return;
         if (groupRef.current) groupRef.current.position.set(data.position[0], data.position[1], data.position[2]);
         
         const time = state.clock.elapsedTime;
+        const isUltimate = vaccineCount >= MILESTONE_VACCINE_COUNT;
 
         if (iconRef.current) {
             iconRef.current.scale.setScalar(1 + Math.sin(time * 8) * 0.1);
@@ -400,7 +411,10 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
 
         if (warningRef.current) {
             const material = warningRef.current.material as THREE.MeshBasicMaterial;
-            if (material) material.opacity = 0.2 + Math.abs(Math.sin(time * 8)) * 0.3;
+            if (material) {
+              const baseOpacity = isUltimate ? 0.45 : 0.2;
+              material.opacity = baseOpacity + Math.abs(Math.sin(time * 20)) * 0.5;
+            }
         }
 
         if (floorGlowRef.current) {
@@ -409,11 +423,27 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             if (material) material.opacity = 0.3 + Math.sin(time * 6) * 0.2;
         }
 
+        if (isUltimate) {
+            // Intense white pulse for the hurdle frame
+            const pulseIntensity = 20 + Math.sin(time * 30) * 10; 
+            const obstacleMatRefs = [topBarRef, emitterRef, baseRef, postALeftRef, postARightRef];
+            obstacleMatRefs.forEach(ref => {
+              if (ref.current) {
+                const mat = ref.current.material as THREE.MeshStandardMaterial;
+                mat.emissiveIntensity = pulseIntensity;
+              }
+            });
+        }
+
         if (data.type === ObjectType.VACCINE && groupRef.current) {
             groupRef.current.rotation.y += data.isFinalVaccine ? 0.08 : 0.04;
             groupRef.current.position.y += Math.sin(time * 3) * 0.005; 
         }
     });
+
+    const isUltimate = useStore.getState().vaccineCount >= MILESTONE_VACCINE_COUNT;
+    const baseObstacleColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#0f172a";
+    const postObstacleColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#1e293b";
 
     return (
         <Group ref={groupRef}>
@@ -426,6 +456,7 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     <Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.02, 0]} geometry={SHADOW_GEO}>
                         <MeshBasicMaterial color="#000" opacity={0.3} transparent />
                     </Mesh>
+                    {/* Ground Warning uses original color (Jump=Green, Slide=Red) */}
                     <Mesh ref={warningRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.03, 10]}>
                         <PlaneGeometry args={[LANE_WIDTH - 0.2, 20.0]} />
                         <MeshBasicMaterial color={data.color} transparent opacity={0.4} />
@@ -439,18 +470,20 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
 
             {data.type === ObjectType.OBSTACLE && (
                 <Group>
-                    <Mesh position={[0, -0.35, 0]} geometry={HURDLE_BASE_GEO}>
-                        <MeshStandardMaterial color="#0f172a" />
+                    <Mesh ref={baseRef} position={[0, -0.35, 0]} geometry={HURDLE_BASE_GEO}>
+                        <MeshStandardMaterial color={baseObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
-                    <Mesh position={[0, 0.2, 0]} geometry={HURDLE_TOP_BAR_GEO}>
-                        <MeshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={1} />
+                    <Mesh ref={topBarRef} position={[0, 0.2, 0]} geometry={HURDLE_TOP_BAR_GEO}>
+                        {/* Top bar uses White in Ultimate mode but icons remain colored */}
+                        <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 25 : 1} />
                     </Mesh>
-                    <Mesh position={[1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
-                        <MeshStandardMaterial color="#1e293b" />
+                    <Mesh ref={postALeftRef} position={[1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
+                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
-                    <Mesh position={[-1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
-                        <MeshStandardMaterial color="#1e293b" />
+                    <Mesh ref={postARightRef} position={[-1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
+                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
+                    {/* Icon stays colored for clarity */}
                     <Group ref={iconRef}>
                         <Mesh geometry={ICON_GEO}>
                             <MeshBasicMaterial color={data.color} />
@@ -460,18 +493,19 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             )}
             {data.type === ObjectType.HIGH_BARRIER && (
                 <Group>
-                    <Mesh position={[0, 0, 0]} geometry={GATE_TOP_HOUSING_GEO}>
-                        <MeshStandardMaterial color="#0f172a" />
+                    <Mesh ref={baseRef} position={[0, 0, 0]} geometry={GATE_TOP_HOUSING_GEO}>
+                        <MeshStandardMaterial color={baseObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
-                    <Mesh position={[0, -0.35, 0]} geometry={GATE_EMITTER_GEO} rotation={[Math.PI, 0, 0]}>
-                        <MeshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={1} />
+                    <Mesh ref={emitterRef} position={[0, -0.35, 0]} geometry={GATE_EMITTER_GEO} rotation={[Math.PI, 0, 0]}>
+                        <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 25 : 1} />
                     </Mesh>
-                    <Mesh position={[1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
-                        <MeshStandardMaterial color="#1e293b" />
+                    <Mesh ref={postALeftRef} position={[1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
+                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
-                    <Mesh position={[-1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
-                        <MeshStandardMaterial color="#1e293b" />
+                    <Mesh ref={postARightRef} position={[-1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
+                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
+                    {/* Icon stays colored for clarity */}
                     <Group ref={iconRef} rotation={[0, 0, Math.PI]}>
                         <Mesh geometry={ICON_GEO}>
                             <MeshBasicMaterial color={data.color} />

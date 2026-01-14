@@ -24,7 +24,7 @@ export const HUD: React.FC = () => {
     <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-30 pointer-events-none text-center px-4">
         <div className="flex items-center space-x-2 font-mono text-[8px] md:text-[9px] tracking-[0.2em] text-cyan-800 uppercase">
             <Terminal className="w-2 h-2 md:w-2.5 md:h-2.5" />
-            <span>20價大冒險 v5.4.4 | 任務控制</span>
+            <span>20價大冒險 v5.4.5 | 任務控制</span>
         </div>
     </div>
   );
@@ -217,16 +217,18 @@ export const HUD: React.FC = () => {
 
             <div className="w-full flex flex-col items-center">
                 <div className="w-full max-w-5xl h-6 md:h-10 bg-slate-200/30 rounded-full overflow-hidden shadow-inner border-[4px] border-white/20 relative backdrop-blur-md">
-                    {/* The Progress Bar with 'Dashes' */}
+                    {/* The Progress Bar */}
                     <div className={`h-full transition-all duration-1000 ease-out ${isUltimateStage ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.5)]' : 'bg-cyan-500 shadow-[0_0_30px_rgba(14,165,233,0.5)]'}`} style={{ width: `${progressPercent}%` }} />
-                    <div className="absolute inset-0 flex">
-                        {Array.from({ length: 20 }).map((_, i) => (
-                            <div key={i} className="h-full flex-1 border-r border-white/20 last:border-r-0" />
-                        ))}
-                    </div>
                 </div>
-                <div className="flex justify-between w-full max-w-5xl mt-4 px-4">
-                    <span className="text-sm md:text-3xl font-black text-white uppercase tracking-widest font-cyber whitespace-nowrap">疫苗進度</span>
+                <div className="flex justify-between items-center w-full max-w-5xl mt-4 px-4">
+                    <div className="flex items-center space-x-4">
+                      <span className="text-sm md:text-3xl font-black text-white uppercase tracking-widest font-cyber whitespace-nowrap">疫苗進度</span>
+                      {isUltimateStage && (
+                        <div className="px-4 py-1 bg-red-600 text-white text-[10px] md:text-xl font-black rounded-lg animate-pulse uppercase tracking-tighter shadow-[0_0_20px_rgba(220,38,38,0.8)]">
+                           Ultimate Stage
+                        </div>
+                      )}
+                    </div>
                     <span className={`text-sm md:text-4xl font-black tracking-widest font-cyber whitespace-nowrap ${isUltimateStage ? 'text-red-400' : 'text-cyan-300'}`}>{vaccineCount} / 20 價</span>
                 </div>
             </div>
