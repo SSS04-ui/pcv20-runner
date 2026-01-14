@@ -37,7 +37,7 @@ export interface GameObject {
   isFinalVaccine?: boolean;
 }
 
-export const LANE_WIDTH = 3.5; // Broader lanes
+export const LANE_WIDTH = 5.5; // Increased to 5.5 for maximum mobile visibility
 export const JUMP_HEIGHT = 2.5;
 export const JUMP_DURATION = 0.5;
 export const SLIDE_DURATION = 0.6;

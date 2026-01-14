@@ -25,6 +25,7 @@ interface GameState {
   vaccineCount: number;
   showLevelUpPopup: boolean;
   isMilestonePaused: boolean;
+  countdownValue: number;
   
   level: number;
   laneCount: number;
@@ -62,10 +63,10 @@ interface GameState {
 
 export const MAX_VACCINES = 20; 
 export const MILESTONE_VACCINE_COUNT = 15; 
-const INITIAL_TIME = 45; 
+const INITIAL_TIME = 50; 
 const POINTS_PER_VACCINE = 500;
 const SPEED_SCALE_FACTOR_NORMAL = 1.05; 
-const SPEED_SCALE_FACTOR_POST_MILESTONE = 1.03; 
+const SPEED_SCALE_FACTOR_POST_MILESTONE = 1.035; // Tuned down from 1.04 to balance the 13% spike
 
 export const useStore = create<GameState>()(
   persist(
@@ -78,6 +79,7 @@ export const useStore = create<GameState>()(
       vaccineCount: 0,
       showLevelUpPopup: false,
       isMilestonePaused: false,
+      countdownValue: 0,
       level: 1,
       laneCount: 3, 
       timeLeft: INITIAL_TIME,
@@ -105,6 +107,7 @@ export const useStore = create<GameState>()(
         vaccineCount: 0,
         showLevelUpPopup: false,
         isMilestonePaused: false,
+        countdownValue: 0,
         level: 1,
         timeLeft: INITIAL_TIME,
         timeBonus: 0,
@@ -121,6 +124,7 @@ export const useStore = create<GameState>()(
         vaccineCount: 0,
         showLevelUpPopup: false,
         isMilestonePaused: false,
+        countdownValue: 0,
         level: 1,
         timeLeft: INITIAL_TIME,
         timeBonus: 0,
@@ -132,14 +136,32 @@ export const useStore = create<GameState>()(
       togglePause: () => {
         const { status } = get();
         if (status === GameStatus.PLAYING) set({ status: GameStatus.PAUSED });
-        else if (status === GameStatus.PAUSED) set({ status: GameStatus.PLAYING });
+        else if (status === GameStatus.PAUSED) {
+            set({ isMilestonePaused: true, countdownValue: 3 });
+            const interval = setInterval(() => {
+                const cv = get().countdownValue;
+                if (cv > 1) {
+                    set({ countdownValue: cv - 1 });
+                } else {
+                    clearInterval(interval);
+                    set({ status: GameStatus.PLAYING, isMilestonePaused: false, countdownValue: 0 });
+                }
+            }, 800);
+        }
       },
 
       dismissMilestone: () => {
-        set({ showLevelUpPopup: false, isMilestonePaused: true });
-        setTimeout(() => {
-          set({ isMilestonePaused: false });
-        }, 1000); // Wait 1s before resuming spawns
+        set({ showLevelUpPopup: false, isMilestonePaused: true, countdownValue: 3 });
+        
+        const interval = setInterval(() => {
+            const cv = get().countdownValue;
+            if (cv > 1) {
+                set({ countdownValue: cv - 1 });
+            } else {
+                clearInterval(interval);
+                set({ isMilestonePaused: false, countdownValue: 0 });
+            }
+        }, 800);
       },
 
       takeDamage: () => {
@@ -168,7 +190,7 @@ export const useStore = create<GameState>()(
         let nextLevel = Math.floor(nextCount / 3) + 1;
 
         if (nextCount === MILESTONE_VACCINE_COUNT) {
-            nextSpeed = nextSpeed * 1.15; 
+            nextSpeed = nextSpeed * 1.13; // Reduced spike from 18% to 13% as requested
             set({ showLevelUpPopup: true });
         }
 

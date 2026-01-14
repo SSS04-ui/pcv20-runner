@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -9,9 +10,11 @@ import * as THREE from 'three';
 import { Environment } from './components/World/Environment';
 import { Player } from './components/World/Player';
 import { LevelManager } from './components/World/LevelManager';
-import { Effects } from './components/World/Effects';
 import { HUD } from './components/UI/HUD';
 import { useStore } from './store';
+
+// Aliases for Three.js intrinsic elements to bypass JSX type check issues
+const Group = 'group' as any;
 
 // Dynamic Camera Controller
 const CameraController = () => {
@@ -23,32 +26,43 @@ const CameraController = () => {
     const isMobile = aspect < 1.0; 
     const isTablet = aspect >= 1.0 && aspect < 1.4;
 
-    // Responsive framing: taller screens need a higher perspective to keep player in view
+    // Responsive framing adjustments
     const extraLanes = Math.max(0, laneCount - 3);
     
-    // Adjusted camera height and distance for better framing on all devices
-    // Significantly increased pull-back (targetZ) and height (targetY) for mobile
-    let targetY = isMobile ? 38.0 : (isTablet ? 26.0 : 18.0);
-    let targetZ = isMobile ? 52.0 : (isTablet ? 38.0 : 28.0);
+    // Position parameters: y (height), z (distance)
+    let targetY = 16.0;
+    let targetZ = 22.0;
+    let lookAtY = -10.0;
 
-    // Extreme dynamic adjustment for ultra-tall phone screens (e.g. 21:9)
-    if (isMobile && aspect < 0.5) {
-      targetY += 20.0;
-      targetZ += 25.0;
+    if (isMobile) {
+      // Pull back more on phones to see the player and obstacles under the top HUD
+      targetY = aspect < 0.5 ? 36.0 : 28.0; 
+      targetZ = aspect < 0.5 ? 54.0 : 42.0;
+      lookAtY = -28.0; // Aim much lower to lift the player up in the screen frame
+    } else if (isTablet) {
+      targetY = 22.0;
+      targetZ = 32.0;
+      lookAtY = -15.0;
     }
 
-    targetY += extraLanes * (isMobile ? 5.5 : 2.5);
-    targetZ += extraLanes * (isMobile ? 11.0 : 4.0);
+    targetY += extraLanes * (isMobile ? 3.0 : 1.5);
+    targetZ += extraLanes * (isMobile ? 6.0 : 2.5);
 
     const targetPos = new THREE.Vector3(0, targetY, targetZ);
     
     // Smoothly interpolate camera position
     camera.position.lerp(targetPos, delta * 3.5);
     
-    // Aim lower on mobile to shift the horizon down and push the player higher on screen
-    // This ensures they are not cut off by the bottom edge or obscured by UI
-    const lookAtY = isMobile ? -24.0 : -12.0;
-    camera.lookAt(0, lookAtY, -35); 
+    // Smoothly aim camera
+    const currentLookAt = new THREE.Vector3(0, lookAtY, -35);
+    camera.lookAt(currentLookAt); 
+    
+    if (camera instanceof THREE.PerspectiveCamera) {
+        // Adjust FOV slightly based on orientation to reduce edge stretching on wide devices
+        const targetFov = isMobile ? 60 : 64;
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, delta * 2);
+        camera.updateProjectionMatrix();
+    }
   });
   
   return null;
@@ -56,14 +70,13 @@ const CameraController = () => {
 
 const Scene = () => {
   return (
-    <group>
+    <Group>
         <Environment />
-        <group name="PlayerGroup">
+        <Group name="PlayerGroup">
              <Player />
-        </group>
+        </Group>
         <LevelManager />
-        <Effects />
-    </group>
+    </Group>
   );
 };
 
