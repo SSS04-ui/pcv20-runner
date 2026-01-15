@@ -122,7 +122,7 @@ const ParticleSystem: React.FC = () => {
 };
 
 export const LevelManager: React.FC = () => {
-  const { status, speed, collectVaccine, level, tick, laneCount, vaccineCount, showLevelUpPopup, isMilestonePaused, startTime, timeLeft } = useStore();
+  const { status, speed, collectVaccine, level, tick, laneCount, vaccineCount, showLevelUpPopup, isMilestonePaused, timeLeft } = useStore();
   const objectsRef = useRef<GameObject[]>([]);
   const [, setRenderTrigger] = useState(0);
   const playerObjRef = useRef<THREE.Object3D | null>(null);
@@ -132,10 +132,24 @@ export const LevelManager: React.FC = () => {
   const nextVaccineDistance = useRef(21); 
 
   const firstSpawnDone = useRef(false);
-  const prevShowPopup = useRef(false);
-
   const obstaclesSinceLastVaccine = useRef(0);
   const totalSpawnedVaccines = useRef(0);
+  const lastVaccineLaneRef = useRef<number>(-1);
+
+  // Robust Reset Mechanism for Game Restart
+  useEffect(() => {
+    if (status === GameStatus.PLAYING && vaccineCount === 0) {
+        objectsRef.current = [];
+        totalDistance.current = 0;
+        firstSpawnDone.current = false;
+        obstaclesSinceLastVaccine.current = 0;
+        totalSpawnedVaccines.current = 0;
+        lastVaccineLaneRef.current = -1;
+        nextObstacleDistance.current = 9999;
+        nextVaccineDistance.current = 21;
+        setRenderTrigger(t => t + 1);
+    }
+  }, [status, vaccineCount]);
 
   const getLaneX = (lane: number) => (lane - Math.floor(laneCount / 2)) * LANE_WIDTH;
 
@@ -151,20 +165,11 @@ export const LevelManager: React.FC = () => {
 
   useFrame((state, delta) => {
     if (status !== GameStatus.PLAYING) return;
-
-    if (showLevelUpPopup && !prevShowPopup.current) {
-        objectsRef.current = objectsRef.current.filter(o => o.type === ObjectType.VACCINE);
-        obstaclesSinceLastVaccine.current = 0;
-        setRenderTrigger(t => t + 1);
-    }
-    prevShowPopup.current = showLevelUpPopup;
-
     if (showLevelUpPopup) return;
     
     if (isMilestonePaused) {
         nextObstacleDistance.current = totalDistance.current + (speed * 1.0); 
-        nextVaccineDistance.current = nextObstacleDistance.current + (speed * 2.0); 
-        obstaclesSinceLastVaccine.current = 0; 
+        nextVaccineDistance.current = nextObstacleDistance.current + (speed * 1.5); 
     }
 
     const safeDelta = Math.min(delta, 0.05); 
@@ -192,7 +197,7 @@ export const LevelManager: React.FC = () => {
         });
         firstSpawnDone.current = true;
         obstaclesSinceLastVaccine.current += 1;
-        nextObstacleDistance.current = totalDistance.current + (speed * 0.5); 
+        nextObstacleDistance.current = totalDistance.current + (speed * 0.8); 
         hasChanges = true;
     }
 
@@ -202,8 +207,8 @@ export const LevelManager: React.FC = () => {
         
         obj.position[2] += stepDist;
         if (obj.active) {
-            const inZ = Math.abs(obj.position[2] - playerPos.z) < 1.0;
-            const inX = Math.abs(obj.position[0] - playerPos.x) < 1.4;
+            const inZ = Math.abs(obj.position[2] - playerPos.z) < 1.4;
+            const inX = Math.abs(obj.position[0] - playerPos.x) < 1.6;
             
             if (inZ && inX) {
                 if (obj.type === ObjectType.VACCINE) {
@@ -212,7 +217,7 @@ export const LevelManager: React.FC = () => {
                     audio.playLetterCollect();
                     window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: obj.color } }));
                     obj.active = false;
-                } else if (!isMilestonePaused && status === GameStatus.PLAYING) {
+                } else if (!isMilestonePaused) {
                     let hit = false;
                     if (obj.type === ObjectType.OBSTACLE && playerPos.y < 1.2) hit = true; 
                     if (obj.type === ObjectType.HIGH_BARRIER && !isSliding) hit = true; 
@@ -227,37 +232,16 @@ export const LevelManager: React.FC = () => {
         if (obj.position[2] > REMOVE_DISTANCE) { currentObjects.splice(i, 1); hasChanges = true; }
     }
 
-    if (firstSpawnDone.current && totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused && status === GameStatus.PLAYING) {
-        const elapsedTime = (Date.now() - startTime) / 1000;
+    if (firstSpawnDone.current && totalDistance.current >= nextObstacleDistance.current && !isMilestonePaused) {
         const isUltimate = vaccineCount >= MILESTONE_VACCINE_COUNT;
-        
-        let targetReactionTime: number;
-        let doubleLaneChance: number;
-
-        if (isUltimate) {
-            targetReactionTime = 0.66; 
-            doubleLaneChance = 0.20;   
-        } else {
-            if (elapsedTime < 2) {
-                targetReactionTime = 0.8;
-                doubleLaneChance = 0.1;
-            } else if (elapsedTime < 10) {
-                const progress = (elapsedTime - 2) / 8;
-                targetReactionTime = 0.8 - (progress * 0.1);
-                doubleLaneChance = 0.15;
-            } else {
-                targetReactionTime = 0.65 - Math.min(0.2, level * 0.02);
-                doubleLaneChance = 0.2 + Math.min(0.3, level * 0.03);
-            }
-        }
-        
-        const type = Math.random() > 0.4 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
+        const targetReactionTime = (isUltimate ? 0.65 : 0.8 - Math.min(0.2, level * 0.02)) * 1.43;
+        const doubleLaneChance = isUltimate ? 0.3 : 0.15 + Math.min(0.2, level * 0.02);
+        const type = Math.random() > 0.45 ? ObjectType.HIGH_BARRIER : ObjectType.OBSTACLE;
+        const obstacleColor = type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP;
         const isDoubleLane = Math.random() < doubleLaneChance; 
+        
         nextObstacleDistance.current = totalDistance.current + (speed * targetReactionTime);
         
-        // Gameplay colors always active for logic/warnings
-        const obstacleColor = type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP;
-
         if (isDoubleLane) {
             const laneA = Math.floor(Math.random() * laneCount);
             let laneB = (laneA + 1) % laneCount;
@@ -279,32 +263,37 @@ export const LevelManager: React.FC = () => {
         hasChanges = true;
     }
 
-    if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused && status === GameStatus.PLAYING) {
+    if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused) {
         const isPostMilestone = vaccineCount >= MILESTONE_VACCINE_COUNT;
-        // REQUIREMENT: 5 barriers after the 15th vaccine
-        let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= (isPostMilestone ? 5 : 2); 
+        const barrierRequirement = isPostMilestone ? 3 : 2; 
         
-        if (meetsBarrierRequirement && totalSpawnedVaccines.current < 50 && vaccineCount < MAX_VACCINES) {
+        if (obstaclesSinceLastVaccine.current >= barrierRequirement && vaccineCount < MAX_VACCINES) {
             let lane = Math.floor(Math.random() * laneCount);
-            const vaccineSpawnGap = (speed * (1.2 + Math.random() * 0.8));
-            nextVaccineDistance.current = totalDistance.current + vaccineSpawnGap;
-            const isFinal = vaccineCount === (MAX_VACCINES - 1);
+            
+            // Constraint: No consecutive vaccines in the same lane
+            if (lane === lastVaccineLaneRef.current) {
+                lane = (lane + 1) % laneCount;
+            }
+            lastVaccineLaneRef.current = lane;
+            
+            // INCREASE VACCINE FREQUENCY BY ANOTHER 25%: 1.15 / 1.25 = 0.92
+            nextVaccineDistance.current = totalDistance.current + (speed * 0.92);
             
             currentObjects.push({
                 id: uuidv4(), 
                 type: ObjectType.VACCINE, 
                 position: [getLaneX(lane), 1.5, -SPAWN_DISTANCE - 10],
                 active: true, 
-                color: (isFinal || isPostMilestone) ? COLOR_GOLD : COLOR_VACCINE,
-                isFinalVaccine: isFinal || isPostMilestone
+                color: isPostMilestone ? COLOR_GOLD : COLOR_VACCINE,
+                isFinalVaccine: isPostMilestone
             });
             totalSpawnedVaccines.current++;
             hasChanges = true;
-        } else if (!meetsBarrierRequirement) {
-            nextVaccineDistance.current = totalDistance.current + (speed * 0.3); 
+        } else if (obstaclesSinceLastVaccine.current < barrierRequirement) {
+            nextVaccineDistance.current = totalDistance.current + (speed * 0.2); 
         }
     }
-    if (hasChanges && status === GameStatus.PLAYING) { 
+    if (hasChanges) { 
         objectsRef.current = currentObjects; 
         setRenderTrigger(t => t + 1); 
     }
@@ -352,22 +341,10 @@ const SyringeFigure: React.FC<{ color: string, isFinal?: boolean }> = ({ color, 
                 <MeshBasicMaterial color={isFinal ? COLOR_GOLD : "#ffffff"} side={THREE.BackSide} />
             </Mesh>
             <Mesh geometry={SYRINGE_BODY_GEO}>
-                <MeshStandardMaterial 
-                    color={isFinal ? "#fef3c7" : "#ffffff"} 
-                    transparent 
-                    opacity={0.8} 
-                    roughness={0.1} 
-                    metalness={0.9} 
-                />
+                <MeshStandardMaterial color={isFinal ? "#fef3c7" : "#ffffff"} transparent opacity={0.8} roughness={0.1} metalness={0.9} />
             </Mesh>
             <Mesh scale={[0.85, 0.75, 0.85]} position={[0, -0.05, 0]} geometry={SYRINGE_BODY_GEO}>
-                <MeshStandardMaterial 
-                    color={color} 
-                    emissive={color} 
-                    emissiveIntensity={isFinal ? 12 : 5} 
-                    metalness={0.9}
-                    roughness={0.1}
-                />
+                <MeshStandardMaterial color={color} emissive={color} emissiveIntensity={isFinal ? 12 : 5} metalness={0.9} roughness={0.1} />
             </Mesh>
             <Mesh position={[0, 0.3, 0]} geometry={SYRINGE_CAP_GEO}>
                 <MeshStandardMaterial color={isFinal ? "#f59e0b" : "#ccc"} metalness={1} roughness={0.2} />
@@ -388,7 +365,6 @@ const SyringeFigure: React.FC<{ color: string, isFinal?: boolean }> = ({ color, 
 const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
     const groupRef = useRef<THREE.Group>(null);
     const iconRef = useRef<THREE.Group>(null);
-    const warningRef = useRef<THREE.Mesh>(null);
     const floorGlowRef = useRef<THREE.Mesh>(null);
     const topBarRef = useRef<THREE.Mesh>(null);
     const emitterRef = useRef<THREE.Mesh>(null);
@@ -409,39 +385,24 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             iconRef.current.position.y = (data.type === ObjectType.HIGH_BARRIER ? -1.0 : 0.8) + Math.sin(time * 4) * 0.05;
         }
 
-        if (warningRef.current) {
-            const material = warningRef.current.material as THREE.MeshBasicMaterial;
-            if (material) {
-              const baseOpacity = isUltimate ? 0.45 : 0.2;
-              material.opacity = baseOpacity + Math.abs(Math.sin(time * 20)) * 0.5;
-            }
-        }
-
         if (floorGlowRef.current) {
             floorGlowRef.current.scale.setScalar(1 + Math.sin(time * 6) * 0.15);
-            const material = floorGlowRef.current.material as THREE.MeshBasicMaterial;
-            if (material) material.opacity = 0.3 + Math.sin(time * 6) * 0.2;
+            (floorGlowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(time * 6) * 0.2;
         }
 
         if (isUltimate) {
-            const pulseIntensity = 20 + Math.sin(time * 30) * 10; 
-            const frameRefs = [topBarRef, emitterRef, baseRef, postALeftRef, postARightRef];
-            frameRefs.forEach(ref => {
-              if (ref.current) {
-                (ref.current.material as THREE.MeshStandardMaterial).emissiveIntensity = pulseIntensity;
-              }
-            });
+            const pInt = 15 + Math.sin(time * 25) * 10; 
+            const refs = [topBarRef, emitterRef, baseRef, postALeftRef, postARightRef];
+            refs.forEach(r => { if (r.current) (r.current.material as THREE.MeshStandardMaterial).emissiveIntensity = pInt; });
         }
 
         if (data.type === ObjectType.VACCINE && groupRef.current) {
             groupRef.current.rotation.y += data.isFinalVaccine ? 0.08 : 0.04;
-            groupRef.current.position.y += Math.sin(time * 3) * 0.005; 
         }
     });
 
     const isUltimate = useStore.getState().vaccineCount >= MILESTONE_VACCINE_COUNT;
-    const frameBaseColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#0f172a";
-    const framePostColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#1e293b";
+    const frameColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined;
 
     return (
         <Group ref={groupRef}>
@@ -454,34 +415,23 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     <Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.02, 0]} geometry={SHADOW_GEO}>
                         <MeshBasicMaterial color="#000" opacity={0.3} transparent />
                     </Mesh>
-                    {/* Ground Warning uses original Green/Red for all 20 vaccines */}
-                    <Mesh ref={warningRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.03, 10]}>
-                        <PlaneGeometry args={[LANE_WIDTH - 0.2, 20.0]} />
-                        <MeshBasicMaterial color={data.color} transparent opacity={0.4} />
-                    </Mesh>
-                    <Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.05, 0]}>
-                        <PlaneGeometry args={[LANE_WIDTH - 0.5, 1.2]} />
-                        <MeshBasicMaterial color="#000" transparent opacity={0.8} />
-                    </Mesh>
                 </Group>
             )}
 
             {data.type === ObjectType.OBSTACLE && (
                 <Group>
                     <Mesh ref={baseRef} position={[0, -0.35, 0]} geometry={HURDLE_BASE_GEO}>
-                        <MeshStandardMaterial color={frameBaseColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameColor || "#0f172a"} emissive={frameColor} />
                     </Mesh>
                     <Mesh ref={topBarRef} position={[0, 0.2, 0]} geometry={HURDLE_TOP_BAR_GEO}>
-                        {/* Frame bar is white in Ultimate, gameplay color otherwise */}
-                        <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 25 : 1} />
+                        <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 15 : 1} />
                     </Mesh>
                     <Mesh ref={postALeftRef} position={[1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
-                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameColor || "#1e293b"} emissive={frameColor} />
                     </Mesh>
                     <Mesh ref={postARightRef} position={[-1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
-                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameColor || "#1e293b"} emissive={frameColor} />
                     </Mesh>
-                    {/* Floating Icon stays Green/Red for clarity */}
                     <Group ref={iconRef}>
                         <Mesh geometry={ICON_GEO}>
                             <MeshBasicMaterial color={data.color} />
@@ -492,16 +442,16 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             {data.type === ObjectType.HIGH_BARRIER && (
                 <Group>
                     <Mesh ref={baseRef} position={[0, 0, 0]} geometry={GATE_TOP_HOUSING_GEO}>
-                        <MeshStandardMaterial color={frameBaseColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameColor || "#0f172a"} emissive={frameColor} />
                     </Mesh>
                     <Mesh ref={emitterRef} position={[0, -0.35, 0]} geometry={GATE_EMITTER_GEO} rotation={[Math.PI, 0, 0]}>
-                        <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 25 : 1} />
+                        <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 15 : 1} />
                     </Mesh>
                     <Mesh ref={postALeftRef} position={[1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
-                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameColor || "#1e293b"} emissive={frameColor} />
                     </Mesh>
                     <Mesh ref={postARightRef} position={[-1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
-                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameColor || "#1e293b"} emissive={frameColor} />
                     </Mesh>
                     <Group ref={iconRef} rotation={[0, 0, Math.PI]}>
                         <Mesh geometry={ICON_GEO}>
