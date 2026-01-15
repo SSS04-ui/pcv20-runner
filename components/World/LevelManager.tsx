@@ -62,7 +62,7 @@ const COLOR_JUMP = '#10b981'; // Neon Green
 const COLOR_SLIDE = '#f43f5e'; // Neon Red
 const COLOR_VACCINE = '#0ea5e9'; 
 const COLOR_GOLD = '#fbbf24';
-const COLOR_ULTIMATE_OBSTACLE = '#ffffff'; // Blinding White for Ultimate Stage hurdle frame
+const COLOR_ULTIMATE_OBSTACLE = '#ffffff'; // Blinding White frame for Ultimate Stage
 
 const ParticleSystem: React.FC = () => {
     const mesh = useRef<THREE.InstancedMesh>(null);
@@ -255,7 +255,7 @@ export const LevelManager: React.FC = () => {
         const isDoubleLane = Math.random() < doubleLaneChance; 
         nextObstacleDistance.current = totalDistance.current + (speed * targetReactionTime);
         
-        // Colors for gameplay clarity: Jump=Green, Slide=Red
+        // Gameplay colors always active for logic/warnings
         const obstacleColor = type === ObjectType.HIGH_BARRIER ? COLOR_SLIDE : COLOR_JUMP;
 
         if (isDoubleLane) {
@@ -281,7 +281,7 @@ export const LevelManager: React.FC = () => {
 
     if (totalDistance.current >= nextVaccineDistance.current && !isMilestonePaused && status === GameStatus.PLAYING) {
         const isPostMilestone = vaccineCount >= MILESTONE_VACCINE_COUNT;
-        // Strictly require 5 barriers after the 15th vaccine milestone
+        // REQUIREMENT: 5 barriers after the 15th vaccine
         let meetsBarrierRequirement = obstaclesSinceLastVaccine.current >= (isPostMilestone ? 5 : 2); 
         
         if (meetsBarrierRequirement && totalSpawnedVaccines.current < 50 && vaccineCount < MAX_VACCINES) {
@@ -424,13 +424,11 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
         }
 
         if (isUltimate) {
-            // Intense white pulse for the hurdle frame
             const pulseIntensity = 20 + Math.sin(time * 30) * 10; 
-            const obstacleMatRefs = [topBarRef, emitterRef, baseRef, postALeftRef, postARightRef];
-            obstacleMatRefs.forEach(ref => {
+            const frameRefs = [topBarRef, emitterRef, baseRef, postALeftRef, postARightRef];
+            frameRefs.forEach(ref => {
               if (ref.current) {
-                const mat = ref.current.material as THREE.MeshStandardMaterial;
-                mat.emissiveIntensity = pulseIntensity;
+                (ref.current.material as THREE.MeshStandardMaterial).emissiveIntensity = pulseIntensity;
               }
             });
         }
@@ -442,8 +440,8 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
     });
 
     const isUltimate = useStore.getState().vaccineCount >= MILESTONE_VACCINE_COUNT;
-    const baseObstacleColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#0f172a";
-    const postObstacleColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#1e293b";
+    const frameBaseColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#0f172a";
+    const framePostColor = isUltimate ? COLOR_ULTIMATE_OBSTACLE : "#1e293b";
 
     return (
         <Group ref={groupRef}>
@@ -456,7 +454,7 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
                     <Mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.02, 0]} geometry={SHADOW_GEO}>
                         <MeshBasicMaterial color="#000" opacity={0.3} transparent />
                     </Mesh>
-                    {/* Ground Warning uses original color (Jump=Green, Slide=Red) */}
+                    {/* Ground Warning uses original Green/Red for all 20 vaccines */}
                     <Mesh ref={warningRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -data.position[1] + 0.03, 10]}>
                         <PlaneGeometry args={[LANE_WIDTH - 0.2, 20.0]} />
                         <MeshBasicMaterial color={data.color} transparent opacity={0.4} />
@@ -471,19 +469,19 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             {data.type === ObjectType.OBSTACLE && (
                 <Group>
                     <Mesh ref={baseRef} position={[0, -0.35, 0]} geometry={HURDLE_BASE_GEO}>
-                        <MeshStandardMaterial color={baseObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameBaseColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
                     <Mesh ref={topBarRef} position={[0, 0.2, 0]} geometry={HURDLE_TOP_BAR_GEO}>
-                        {/* Top bar uses White in Ultimate mode but icons remain colored */}
+                        {/* Frame bar is white in Ultimate, gameplay color otherwise */}
                         <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 25 : 1} />
                     </Mesh>
                     <Mesh ref={postALeftRef} position={[1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
-                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
                     <Mesh ref={postARightRef} position={[-1.5, -0.1, 0]} geometry={HURDLE_POST_GEO}>
-                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
-                    {/* Icon stays colored for clarity */}
+                    {/* Floating Icon stays Green/Red for clarity */}
                     <Group ref={iconRef}>
                         <Mesh geometry={ICON_GEO}>
                             <MeshBasicMaterial color={data.color} />
@@ -494,18 +492,17 @@ const GameEntity: React.FC<{ data: GameObject }> = React.memo(({ data }) => {
             {data.type === ObjectType.HIGH_BARRIER && (
                 <Group>
                     <Mesh ref={baseRef} position={[0, 0, 0]} geometry={GATE_TOP_HOUSING_GEO}>
-                        <MeshStandardMaterial color={baseObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={frameBaseColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
                     <Mesh ref={emitterRef} position={[0, -0.35, 0]} geometry={GATE_EMITTER_GEO} rotation={[Math.PI, 0, 0]}>
                         <MeshStandardMaterial color={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : data.color} emissiveIntensity={isUltimate ? 25 : 1} />
                     </Mesh>
                     <Mesh ref={postALeftRef} position={[1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
-                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
                     <Mesh ref={postARightRef} position={[-1.6, -1.2, 0]} geometry={GATE_SIDE_POST_GEO}>
-                        <MeshStandardMaterial color={postObstacleColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
+                        <MeshStandardMaterial color={framePostColor} emissive={isUltimate ? COLOR_ULTIMATE_OBSTACLE : undefined} />
                     </Mesh>
-                    {/* Icon stays colored for clarity */}
                     <Group ref={iconRef} rotation={[0, 0, Math.PI]}>
                         <Mesh geometry={ICON_GEO}>
                             <MeshBasicMaterial color={data.color} />
